@@ -1,0 +1,43 @@
+# Node.js
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+
+# Netlify folder
+.netlify/
+
+# Build directories
+dist/
+build/
+
+# Log files
+*.log
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE / Editor directories and files
+.vscode/
+.idea/
+
+# MacOS system files
+.DS_Store
+
+# Windows system files
+Thumbs.db
+
+# Linux system files
+*~
+
+# Optional: Ignore any generated files (e.g., logs, temp)
+*.bak
+*.swp
+*.swo
+
+# Next.js build output (if you're using Next.js)
+.next/
+out/
