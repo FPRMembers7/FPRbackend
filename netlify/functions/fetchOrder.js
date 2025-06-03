@@ -7,7 +7,7 @@ exports.handler = async function (event, context) {
     const records = [];
 
     await base('Orders').select({
-      maxRecords: 10,
+   
       view: 'Grid view'
     }).eachPage((recordsPage, fetchNextPage) => {
       recordsPage.forEach(record => {
