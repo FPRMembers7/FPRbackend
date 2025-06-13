@@ -1,8 +1,9 @@
 const axios = require("axios");
+const https = require("https");
 const { parseStringPromise } = require("xml2js");
 
-const INVENTORY_URL = "https://webservices.theshootingwarehouse.com/smart/inventory.asmx/OnhandUpdateDS";
-const PRODUCT_URL = "https://webservices.theshootingwarehouse.com/smart/inventory.asmx/DailyItemUpdateDS";
+// 🛡️ Bypass SSL error from ShootingWarehouse
+const agent = new https.Agent({ rejectUnauthorized: false });
 
 exports.handler = async function (event) {
   const {
@@ -16,8 +17,11 @@ exports.handler = async function (event) {
   const limit = parseInt(event.queryStringParameters.limit || "20");
   const offset = (page - 1) * limit;
 
+  const INVENTORY_URL = "https://webservices.theshootingwarehouse.com/smart/inventory.asmx/OnhandUpdateDS";
+  const PRODUCT_URL = "https://webservices.theshootingwarehouse.com/smart/inventory.asmx/DailyItemUpdateDS";
+
   try {
-    // Step 1: Fetch Inventory (once)
+    // 🔄 Fetch Inventory
     const inventoryRes = await axios.get(INVENTORY_URL, {
       params: {
         CustomerNumber: SW_CUST_NO,
@@ -25,22 +29,21 @@ exports.handler = async function (event) {
         Password: SW_PASS,
         Source: SW_SOURCE,
       },
+      httpsAgent: agent,
     });
 
     const inventoryXML = await parseStringPromise(inventoryRes.data);
-    const inventoryItems = inventoryXML?.["DataSet"]?.["NewDataSet"]?.["Table"] || [];
-
+    const inventoryList = inventoryXML?.DataSet?.NewDataSet?.Table || [];
     const inventoryMap = {};
-    inventoryItems.forEach((item) => {
+    inventoryList.forEach((item) => {
       inventoryMap[item.I[0]] = {
-        itemNumber: item.I[0],
-        quantity: item.Q[0],
-        catalogPrice: item.P[0],
-        customerPrice: item.C[0],
+        quantity: item.Q?.[0] || 0,
+        catalogPrice: item.P?.[0] || null,
+        customerPrice: item.C?.[0] || null,
       };
     });
 
-    // Step 2: Fetch Product Chunk (paged)
+    // 🧾 Fetch Product Data (Paginated)
     const productRes = await axios.post(PRODUCT_URL, new URLSearchParams({
       CustomerNumber: SW_CUST_NO,
       UserName: SW_USER,
@@ -50,14 +53,16 @@ exports.handler = async function (event) {
       Source: SW_SOURCE,
     }), {
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      httpsAgent: agent,
     });
 
     const productXML = await parseStringPromise(productRes.data);
-    const productItems = productXML?.["DataSet"]?.["NewDataSet"]?.["Table"] || [];
+    const productList = productXML?.DataSet?.NewDataSet?.Table || [];
 
-    // Step 3: Merge & map response
-    const results = productItems.map((item) => {
+    // 🔗 Merge product + inventory
+    const products = productList.map((item) => {
       const id = item.ITEMNO?.[0];
+      const inventory = inventoryMap[id] || {};
       return {
         itemNumber: id,
         name: item.IDESC?.[0] || "",
@@ -71,10 +76,10 @@ exports.handler = async function (event) {
           weight: item.ITATR9?.[0] || "",
           barrelLength: item.ITATR3?.[0] || "",
         },
-        inventory: inventoryMap[id] || {
-          quantity: 0,
-          catalogPrice: null,
-          customerPrice: null,
+        inventory: {
+          quantity: inventory.quantity || 0,
+          catalogPrice: inventory.catalogPrice,
+          customerPrice: inventory.customerPrice,
         },
       };
     });
@@ -84,15 +89,18 @@ exports.handler = async function (event) {
       body: JSON.stringify({
         page,
         limit,
-        count: results.length,
-        products: results,
+        count: products.length,
+        products,
       }),
     };
 
-  } catch (err) {
+  } catch (error) {
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: "Failed to fetch inventory/products", details: err.message }),
+      body: JSON.stringify({
+        error: "Failed to fetch inventory/products",
+        details: error.message,
+      }),
     };
   }
 };
