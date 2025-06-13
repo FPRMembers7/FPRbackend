@@ -24,7 +24,7 @@ exports.handler = async function (event, context) {
         <CustomerNumber>99994</CustomerNumber>
         <UserName>99994</UserName>
         <Password>12345</Password>
-        <LastUpdate>1/1/1990</LastUpdate>
+        <LastUpdate>1/4/2025</LastUpdate>
         <LastItem>-1</LastItem>
         <Source>FPR</Source>
       </DailyItemUpdateDS>
