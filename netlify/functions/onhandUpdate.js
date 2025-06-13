@@ -2,7 +2,6 @@ const axios = require("axios");
 const https = require("https");
 
 exports.handler = async function (event, context) {
-  // Allow preflight OPTIONS request
   if (event.httpMethod === "OPTIONS") {
     return {
       statusCode: 200,
@@ -20,14 +19,12 @@ exports.handler = async function (event, context) {
                  xmlns:xsd="http://www.w3.org/2001/XMLSchema"
                  xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
     <soap:Body>
-      <DailyItemUpdateDS xmlns="http://webservices.theshootingwarehouse.com/smart/Inventory.asmx">
+      <OnhandUpdateDS xmlns="http://webservices.theshootingwarehouse.com/smart/Inventory.asmx">
         <CustomerNumber>99994</CustomerNumber>
         <UserName>99994</UserName>
         <Password>12345</Password>
-        <LastUpdate>1/1/1990</LastUpdate>
-        <LastItem>-1</LastItem>
         <Source>FPR</Source>
-      </DailyItemUpdateDS>
+      </OnhandUpdateDS>
     </soap:Body>
   </soap:Envelope>`;
 
@@ -39,8 +36,7 @@ exports.handler = async function (event, context) {
         httpsAgent: new https.Agent({ rejectUnauthorized: false }),
         headers: {
           "Content-Type": "text/xml; charset=utf-8",
-          "SOAPAction":
-            "http://webservices.theshootingwarehouse.com/smart/Inventory.asmx/DailyItemUpdateDS",
+          "SOAPAction": "http://webservices.theshootingwarehouse.com/smart/Inventory.asmx/OnhandUpdateDS",
         },
       }
     );
