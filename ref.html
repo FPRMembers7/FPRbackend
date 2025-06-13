@@ -45,6 +45,9 @@
       0% { background-position: -200% 0; }
       100% { background-position: 200% 0; }
     }
+    .modal {
+      backdrop-filter: blur(4px);
+    }
   </style>
 </head>
 <body class="bg-gray-50 font-sans text-gray-800">
@@ -74,16 +77,6 @@
         <div id="status-icon" class="mr-3 text-xl"></div>
         <div id="status-message" class="text-sm"></div>
       </div>
-    </div>
-
-    <!-- Debug Panel -->
-    <div id="debug-panel" class="mb-6 p-4 rounded-lg bg-gray-100 border border-gray-200">
-      <div class="flex justify-between items-center mb-2">
-        <h3 class="font-bold text-gray-700">Response Debug</h3>
-        <button id="toggle-raw" class="text-xs px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded">Toggle Raw XML</button>
-      </div>
-      <div id="debug-info" class="text-sm text-gray-600 mb-2"></div>
-      <div id="raw-response" class="text-xs font-mono bg-gray-800 text-green-400 p-3 rounded max-h-40 overflow-auto hidden"></div>
     </div>
 
     <!-- Filters -->
@@ -137,15 +130,51 @@
     </div>
 
     <!-- Skeleton Loader -->
-    <div id="skeleton" class="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 mb-6">
-      <!-- Skeleton templates will be inserted here -->
+    <div id="skeleton" class="bg-white rounded-lg shadow-sm overflow-hidden mb-6">
+      <div class="overflow-x-auto">
+        <table class="min-w-full">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item #</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">UPC</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="skeleton-body" class="bg-white divide-y divide-gray-200">
+            <!-- Skeleton rows will be inserted here -->
+          </tbody>
+        </table>
+      </div>
     </div>
 
-    <!-- Product Grid -->
-    <div id="product-list" class="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"></div>
+    <!-- Inventory Table -->
+    <div id="inventory-table" class="bg-white rounded-lg shadow-sm overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="min-w-full">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item #</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">UPC</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="table-body" class="bg-white divide-y divide-gray-200">
+            <!-- Table rows will be inserted here -->
+          </tbody>
+        </table>
+      </div>
+    </div>
 
     <!-- Empty State -->
-    <div id="empty-state" class="hidden text-center py-12">
+    <div id="empty-state" class="hidden text-center py-12 bg-white rounded-lg shadow-sm">
       <div class="text-gray-400 text-6xl mb-4">
         <i class="fas fa-box-open"></i>
       </div>
@@ -164,10 +193,48 @@
     </div>
   </main>
 
+  <!-- Item Details Modal -->
+  <div id="item-modal" class="fixed inset-0 bg-black bg-opacity-50 modal hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div class="p-6">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-2xl font-bold text-gray-900">Item Details</h2>
+          <button id="close-modal" class="text-gray-400 hover:text-gray-600 text-2xl">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        
+        <div id="modal-content" class="space-y-4">
+          <!-- Modal content will be inserted here -->
+        </div>
+        
+        <div class="flex gap-3 mt-6 pt-4 border-t">
+          <button id="modal-add-to-cart" class="flex-1 bg-primary-600 hover:bg-primary-700 text-white py-2 px-4 rounded transition-colors">
+            <i class="fas fa-shopping-cart mr-2"></i>
+            Add to Cart
+          </button>
+          <button id="close-modal-btn" class="px-6 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 transition-colors">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cart Success Toast -->
+  <div id="cart-toast" class="fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg transform translate-x-full transition-transform duration-300 z-50">
+    <div class="flex items-center">
+      <i class="fas fa-check-circle mr-2"></i>
+      <span>Item added to cart!</span>
+    </div>
+  </div>
+
   <script>
     const API_ENDPOINT = "http://localhost:8888/.netlify/functions/dailyItemUpdate";
-    const productList = document.getElementById('product-list');
+    const tableBody = document.getElementById('table-body');
+    const skeletonBody = document.getElementById('skeleton-body');
     const skeleton = document.getElementById('skeleton');
+    const inventoryTable = document.getElementById('inventory-table');
     const loadMoreBtn = document.getElementById('load-more');
     const searchInput = document.getElementById('search-input');
     const sortSelect = document.getElementById('sort-select');
@@ -179,9 +246,14 @@
     const statusBar = document.getElementById('status-bar');
     const statusIcon = document.getElementById('status-icon');
     const statusMessage = document.getElementById('status-message');
-    const debugInfo = document.getElementById('debug-info');
-    const rawResponse = document.getElementById('raw-response');
-    const toggleRawBtn = document.getElementById('toggle-raw');
+    
+    // Modal elements
+    const itemModal = document.getElementById('item-modal');
+    const closeModal = document.getElementById('close-modal');
+    const closeModalBtn = document.getElementById('close-modal-btn');
+    const modalContent = document.getElementById('modal-content');
+    const modalAddToCart = document.getElementById('modal-add-to-cart');
+    const cartToast = document.getElementById('cart-toast');
     
     // Stats elements
     const totalItemsEl = document.getElementById('total-items');
@@ -195,11 +267,112 @@
     let searchTerm = '';
     let currentSort = 'name';
     let currentQtyFilter = 'all';
-    let rawXml = '';
+    let currentModalItem = null;
 
-    // Toggle raw XML display
-    toggleRawBtn.addEventListener('click', () => {
-      rawResponse.classList.toggle('hidden');
+    // Modal functionality
+    function openModal(item) {
+      currentModalItem = item;
+      
+      const qty = parseInt(item.QTYOH) || 0;
+      let stockStatus = '';
+      let stockClass = '';
+      
+      if (qty <= 0) {
+        stockStatus = 'Out of Stock';
+        stockClass = 'bg-red-100 text-red-800';
+      } else if (qty < 5) {
+        stockStatus = 'Low Stock';
+        stockClass = 'bg-yellow-100 text-yellow-800';
+      } else {
+        stockStatus = 'In Stock';
+        stockClass = 'bg-green-100 text-green-800';
+      }
+      
+      modalContent.innerHTML = `
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <h3 class="text-lg font-semibold mb-3">Product Information</h3>
+            <div class="space-y-3">
+              <div>
+                <label class="block text-sm font-medium text-gray-500">Item Number</label>
+                <p class="text-lg">${item.ITEMNO}</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-500">Description</label>
+                <p class="text-lg">${item.IDESC}</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-500">UPC Code</label>
+                <p class="text-lg">${item.ITUPC || 'N/A'}</p>
+              </div>
+            </div>
+          </div>
+          <div>
+            <h3 class="text-lg font-semibold mb-3">Pricing & Availability</h3>
+            <div class="space-y-3">
+              <div>
+                <label class="block text-sm font-medium text-gray-500">Price</label>
+                <p class="text-2xl font-bold text-primary-600">$${parseFloat(item.PRC1 || 0).toFixed(2)}</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-500">Quantity Available</label>
+                <p class="text-lg">${item.QTYOH || 0} units</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-500">Status</label>
+                <span class="inline-flex px-3 py-1 text-sm font-medium rounded-full ${stockClass}">
+                  ${stockStatus}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      itemModal.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeModalFunc() {
+      itemModal.classList.add('hidden');
+      document.body.style.overflow = 'auto';
+      currentModalItem = null;
+    }
+
+    function addToCart(item) {
+      // Here you would typically send the item to your cart/backend
+      console.log('Adding to cart:', item);
+      
+      // Show success toast
+      cartToast.style.transform = 'translateX(0)';
+      setTimeout(() => {
+        cartToast.style.transform = 'translateX(100%)';
+      }, 3000);
+      
+      closeModalFunc();
+    }
+
+    // Modal event listeners
+    closeModal.addEventListener('click', closeModalFunc);
+    closeModalBtn.addEventListener('click', closeModalFunc);
+    modalAddToCart.addEventListener('click', () => {
+      if (currentModalItem) {
+        addToCart(currentModalItem);
+      }
+    });
+
+    // Close modal when clicking outside
+    itemModal.addEventListener('click', (e) => {
+      if (e.target === itemModal) {
+        closeModalFunc();
+      }
+    });
+
+    // Close modal with Escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !itemModal.classList.contains('hidden')) {
+        closeModalFunc();
+      }
     });
 
     // Show status message
@@ -235,31 +408,35 @@
       }
     }
 
-    // Add skeletons
-    function showSkeleton(count = 8) {
-      skeleton.innerHTML = '';
+    // Add skeleton rows
+    function showSkeleton(count = 10) {
+      skeletonBody.innerHTML = '';
       for (let i = 0; i < count; i++) {
-        const skeletonItem = document.createElement('div');
-        skeletonItem.className = 'bg-white p-4 rounded-lg shadow-sm';
-        skeletonItem.innerHTML = `
-          <div class="h-48 shimmer rounded mb-4"></div>
-          <div class="h-5 shimmer rounded w-3/4 mb-3"></div>
-          <div class="h-4 shimmer rounded w-1/2 mb-2"></div>
-          <div class="h-4 shimmer rounded w-2/3 mb-2"></div>
-          <div class="h-6 shimmer rounded w-1/3 mt-3"></div>
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td class="px-6 py-4"><div class="h-4 shimmer rounded w-20"></div></td>
+          <td class="px-6 py-4"><div class="h-4 shimmer rounded w-48"></div></td>
+          <td class="px-6 py-4"><div class="h-4 shimmer rounded w-24"></div></td>
+          <td class="px-6 py-4"><div class="h-4 shimmer rounded w-16"></div></td>
+          <td class="px-6 py-4"><div class="h-4 shimmer rounded w-12"></div></td>
+          <td class="px-6 py-4"><div class="h-6 shimmer rounded w-20"></div></td>
+          <td class="px-6 py-4"><div class="h-8 shimmer rounded w-32"></div></td>
         `;
-        skeleton.appendChild(skeletonItem);
+        skeletonBody.appendChild(row);
       }
+      skeleton.classList.remove('hidden');
+      inventoryTable.classList.add('hidden');
     }
 
     function hideSkeleton() {
-      skeleton.innerHTML = '';
+      skeleton.classList.add('hidden');
+      inventoryTable.classList.remove('hidden');
     }
 
-    // Create product card
-    function createCard(item) {
-      const div = document.createElement('div');
-      div.className = 'bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow fade-in overflow-hidden';
+    // Create table row
+    function createTableRow(item) {
+      const row = document.createElement('tr');
+      row.className = 'hover:bg-gray-50 fade-in';
       
       // Determine stock status
       let stockStatus = '';
@@ -277,29 +454,40 @@
         stockClass = 'bg-green-100 text-green-800';
       }
       
-      div.innerHTML = `
-        <div class="relative">
-          <img 
-            src="https://cdn2.cheaperthandirt.com/ctdimages/${item.ITEMNO}.jpg" 
-            alt="${item.IDESC}" 
-            class="w-full h-48 object-contain bg-gray-50 p-2"
-            onerror="this.onerror=null; this.src='/placeholder.svg?height=200&width=200'; this.classList.add('p-8');"
-          >
-          <span class="absolute top-2 right-2 px-2 py-1 text-xs font-medium rounded ${stockClass}">
+      row.innerHTML = `
+        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${item.ITEMNO}</td>
+        <td class="px-6 py-4 text-sm text-gray-900 max-w-xs truncate" title="${item.IDESC}">${item.IDESC}</td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${item.ITUPC || 'N/A'}</td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold text-primary-600">$${parseFloat(item.PRC1 || 0).toFixed(2)}</td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${item.QTYOH || 0}</td>
+        <td class="px-6 py-4 whitespace-nowrap">
+          <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full ${stockClass}">
             ${stockStatus}
           </span>
-        </div>
-        <div class="p-4">
-          <h2 class="text-lg font-medium mb-1 line-clamp-2" title="${item.IDESC}">${item.IDESC}</h2>
-          <p class="text-gray-500 text-sm mb-2">Item #: ${item.ITEMNO}</p>
-          <p class="text-gray-600 text-sm mb-3">UPC: ${item.ITUPC || 'N/A'}</p>
-          <div class="flex justify-between items-center">
-            <p class="text-xl font-bold text-primary-700">$${parseFloat(item.PRC1 || 0).toFixed(2)}</p>
-            <p class="text-sm bg-gray-100 px-2 py-1 rounded">Qty: ${item.QTYOH || 0}</p>
+        </td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+          <div class="flex space-x-2">
+            <button class="view-btn bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs transition-colors">
+              <i class="fas fa-eye mr-1"></i>View
+            </button>
+            <button class="cart-btn bg-primary-600 hover:bg-primary-700 text-white px-3 py-1 rounded text-xs transition-colors ${qty <= 0 ? 'opacity-50 cursor-not-allowed' : ''}">
+              <i class="fas fa-shopping-cart mr-1"></i>Add to Cart
+            </button>
           </div>
-        </div>
+        </td>
       `;
-      return div;
+      
+      // Add event listeners to buttons
+      const viewBtn = row.querySelector('.view-btn');
+      const cartBtn = row.querySelector('.cart-btn');
+      
+      viewBtn.addEventListener('click', () => openModal(item));
+      
+      if (qty > 0) {
+        cartBtn.addEventListener('click', () => addToCart(item));
+      }
+      
+      return row;
     }
 
     // Update stats
@@ -365,15 +553,15 @@
     }
 
     // Render items
-    function renderItems(count = 12) {
+    function renderItems(count = 20) {
       // Clear existing items if this is a fresh render
       if (visibleCount === 0) {
-        productList.innerHTML = '';
+        tableBody.innerHTML = '';
       }
       
       const nextItems = filteredItems.slice(visibleCount, visibleCount + count);
       nextItems.forEach(item => {
-        productList.appendChild(createCard(item));
+        tableBody.appendChild(createTableRow(item));
       });
       visibleCount += nextItems.length;
 
@@ -381,8 +569,9 @@
       loadMoreBtn.style.display = visibleCount >= filteredItems.length ? 'none' : 'inline-block';
       
       // Show empty state if no items
-      emptyState.classList.toggle('hidden', filteredItems.length > 0);
-      productList.classList.toggle('hidden', filteredItems.length === 0);
+      const hasItems = filteredItems.length > 0;
+      emptyState.classList.toggle('hidden', hasItems);
+      inventoryTable.classList.toggle('hidden', !hasItems);
     }
 
     // Apply filters and refresh the view
@@ -392,62 +581,33 @@
       renderItems();
     }
 
-    // Extract data from SOAP XML response - FIXED VERSION
+    // Extract data from SOAP XML response
     function extractDataFromSoapXml(xmlString) {
       try {
-        // Display raw XML for debugging
-        rawResponse.textContent = xmlString;
-        
-        // Create a DOM parser
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(xmlString, "text/xml");
         
-        // Check for parsing errors
         const parserError = xmlDoc.querySelector('parsererror');
         if (parserError) {
-          debugInfo.innerHTML = '<span class="text-red-500">XML parsing error: ' + parserError.textContent + '</span>';
+          console.error('XML parsing error:', parserError.textContent);
           return [];
         }
         
-        // Based on the screenshot, the structure is:
-        // soap:Envelope > soap:Body > DailyItemUpdateResponse > DailyItemUpdateResult > [XML content with Table elements]
-        
         let dataContent = '';
-        
-        // First, try to find the DailyItemUpdateResult element
         const updateResult = xmlDoc.querySelector('DailyItemUpdateResult');
         if (updateResult) {
           dataContent = updateResult.textContent || updateResult.innerHTML;
-          debugInfo.innerHTML = '<span class="text-blue-500">Found DailyItemUpdateResult element</span>';
-        } else {
-          // Fallback: look for any element that might contain the data
-          const possibleElements = [
-            'DailyItemUpdateResponse',
-            'Body',
-            'soap\\:Body'
-          ];
-          
-          for (const elementName of possibleElements) {
-            const element = xmlDoc.querySelector(elementName);
-            if (element && element.textContent) {
-              dataContent = element.textContent;
-              debugInfo.innerHTML = `<span class="text-yellow-500">Found data in ${elementName}</span>`;
-              break;
-            }
-          }
         }
         
         if (!dataContent) {
-          debugInfo.innerHTML = '<span class="text-red-500">Could not find data content in SOAP response</span>';
+          console.error('Could not find data content in SOAP response');
           return [];
         }
         
-        // Now parse the inner XML content that contains the actual data
         let innerXmlDoc;
         try {
           innerXmlDoc = parser.parseFromString(dataContent, "text/xml");
         } catch (e) {
-          // If it's not valid XML, it might be escaped - try to unescape it
           const unescapedContent = dataContent
             .replace(/&lt;/g, '<')
             .replace(/&gt;/g, '>')
@@ -455,20 +615,12 @@
             .replace(/&quot;/g, '"')
             .replace(/&#39;/g, "'");
           
-          try {
-            innerXmlDoc = parser.parseFromString(unescapedContent, "text/xml");
-            debugInfo.innerHTML += '<br><span class="text-green-500">Successfully unescaped XML content</span>';
-          } catch (e2) {
-            debugInfo.innerHTML = '<span class="text-red-500">Failed to parse inner XML content</span>';
-            return [];
-          }
+          innerXmlDoc = parser.parseFromString(unescapedContent, "text/xml");
         }
         
-        // Now look for Table elements in the inner XML
         const tables = Array.from(innerXmlDoc.getElementsByTagName("Table"));
         
         if (tables.length === 0) {
-          // Try looking for other possible container elements
           const alternativeContainers = ['NewDataSet', 'DataSet', 'diffgr:diffgram', 'diffgram'];
           for (const containerName of alternativeContainers) {
             const container = innerXmlDoc.querySelector(containerName);
@@ -476,32 +628,12 @@
               const tablesInContainer = Array.from(container.getElementsByTagName("Table"));
               if (tablesInContainer.length > 0) {
                 tables.push(...tablesInContainer);
-                debugInfo.innerHTML += `<br><span class="text-green-500">Found ${tablesInContainer.length} items in ${containerName}</span>`;
                 break;
               }
             }
           }
         }
         
-        if (tables.length === 0) {
-          debugInfo.innerHTML += '<br><span class="text-red-500">No Table elements found in inner XML</span>';
-          
-          // Show structure of inner XML for debugging
-          const rootElement = innerXmlDoc.documentElement;
-          if (rootElement) {
-            debugInfo.innerHTML += `<br><span class="text-gray-500">Inner XML root: ${rootElement.nodeName}</span>`;
-            const childElements = Array.from(rootElement.children).slice(0, 5).map(el => el.nodeName).join(', ');
-            if (childElements) {
-              debugInfo.innerHTML += `<br><span class="text-gray-500">Child elements: ${childElements}</span>`;
-            }
-          }
-          
-          return [];
-        }
-        
-        debugInfo.innerHTML += `<br><span class="text-green-500">Successfully found ${tables.length} inventory items!</span>`;
-        
-        // Map the table elements to our data format
         return tables.map(table => {
           const get = tag => {
             const element = table.getElementsByTagName(tag)[0];
@@ -518,7 +650,6 @@
         });
         
       } catch (e) {
-        debugInfo.innerHTML = `<span class="text-red-500">Error processing XML: ${e.message}</span>`;
         console.error("Error processing XML:", e);
         return [];
       }
@@ -546,15 +677,10 @@
         
         const json = await res.json();
         
-        // Check if we have a successful response
         if (!json.success) {
           throw new Error(json.message || 'API returned an error');
         }
         
-        // Store raw XML for debugging
-        rawXml = json.xml;
-        
-        // Process the XML data
         allItems = extractDataFromSoapXml(json.xml);
         
         if (allItems.length === 0) {
@@ -567,7 +693,6 @@
         }
         
       } catch (e) {
-        debugInfo.innerHTML = `<span class="text-red-500">Error: ${e.message}</span>`;
         showStatus('error', `Failed to load inventory: ${e.message}`);
         console.error(e);
       } finally {
@@ -576,7 +701,7 @@
     }
 
     // Event Listeners
-    loadMoreBtn.addEventListener('click', () => renderItems(12));
+    loadMoreBtn.addEventListener('click', () => renderItems(20));
     
     applyFiltersBtn.addEventListener('click', () => {
       searchTerm = searchInput.value;
@@ -598,7 +723,7 @@
     refreshBtn.addEventListener('click', () => {
       allItems = [];
       visibleCount = 0;
-      productList.innerHTML = '';
+      tableBody.innerHTML = '';
       fetchItems();
     });
     
