@@ -2,7 +2,6 @@ const axios = require("axios");
 const https = require("https");
 
 exports.handler = async function (event, context) {
-  // Allow preflight OPTIONS request
   if (event.httpMethod === "OPTIONS") {
     return {
       statusCode: 200,
@@ -15,19 +14,22 @@ exports.handler = async function (event, context) {
     };
   }
 
+  // Optional: Pull params from frontend (POST body)
+  const { lastUpdate = "1/1/1990", lastItem = -1 } = JSON.parse(event.body || "{}");
+
   const soapBody = `<?xml version="1.0" encoding="utf-8"?>
   <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                  xmlns:xsd="http://www.w3.org/2001/XMLSchema"
                  xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
     <soap:Body>
-      <DailyItemUpdateDS xmlns="http://webservices.theshootingwarehouse.com/smart/Inventory.asmx">
+      <DailyItemUpdate xmlns="http://webservices.theshootingwarehouse.com/smart/Inventory.asmx">
         <CustomerNumber>99994</CustomerNumber>
         <UserName>99994</UserName>
         <Password>12345</Password>
-        <LastUpdate>5/6/2025</LastUpdate>
-        <LastItem>1</LastItem>
+        <LastUpdate>${lastUpdate}</LastUpdate>
+        <LastItem>${lastItem}</LastItem>
         <Source>FPR</Source>
-      </DailyItemUpdateDS>
+      </DailyItemUpdate>
     </soap:Body>
   </soap:Envelope>`;
 
@@ -39,8 +41,7 @@ exports.handler = async function (event, context) {
         httpsAgent: new https.Agent({ rejectUnauthorized: false }),
         headers: {
           "Content-Type": "text/xml; charset=utf-8",
-          "SOAPAction":
-            "http://webservices.theshootingwarehouse.com/smart/Inventory.asmx/DailyItemUpdateDS",
+          "SOAPAction": "http://webservices.theshootingwarehouse.com/smart/Inventory.asmx/DailyItemUpdate",
         },
       }
     );

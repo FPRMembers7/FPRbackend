@@ -1,478 +1,617 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Inventory Data Viewer</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-  <style>
-    body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      padding: 20px;
-      background-color: #f8f9fa;
-    }
-    .card {
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-      margin-bottom: 20px;
-    }
-    .table-responsive {
-      max-height: 600px;
-      overflow-y: auto;
-    }
-    .loading {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 200px;
-    }
-    .spinner-border {
-      width: 3rem;
-      height: 3rem;
-    }
-    .pagination-info {
-      font-size: 0.9rem;
-      color: #6c757d;
-    }
-    .filter-badge {
-      margin-right: 5px;
-      cursor: pointer;
-    }
-    .date-range {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-    }
-    @media (max-width: 768px) {
-      .date-range {
-        flex-direction: column;
-        align-items: flex-start;
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Firearm Inventory Management</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#fff7ed',
+              100: '#ffedd5',
+              200: '#fed7aa',
+              300: '#fdba74',
+              400: '#fb923c',
+              500: '#f97316',
+              600: '#ea580c',
+              700: '#c2410c',
+              800: '#9a3412',
+              900: '#7c2d12',
+            }
+          }
+        }
       }
+    }
+  </script>
+  <style>
+    .fade-in {
+      animation: fadeIn 0.5s ease-in-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .shimmer {
+      background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+    }
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
     }
   </style>
 </head>
-<body>
-  <div class="container">
-    <h1 class="my-4">Inventory Data Viewer</h1>
-    
-    <!-- Filters and Date Selection -->
-    <div class="card">
-      <div class="card-body">
-        <h5 class="card-title">Search & Filters</h5>
-        
-        <div class="row g-3 mb-3">
-          <!-- Date Range Selection -->
-          <div class="col-md-6">
-            <label class="form-label">Date Range</label>
-            <div class="date-range">
-              <input type="date" id="startDate" class="form-control" value="2024-01-01">
-              <span>to</span>
-              <input type="date" id="endDate" class="form-control" value="2024-03-31">
-            </div>
-          </div>
-          
-          <!-- Search -->
-          <div class="col-md-6">
-            <label for="searchInput" class="form-label">Search</label>
-            <input type="text" id="searchInput" class="form-control" placeholder="Search by item number or description">
-          </div>
+<body class="bg-gray-50 font-sans text-gray-800">
+  <header class="bg-primary-600 text-white shadow-md">
+    <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <i class="fas fa-shield-alt text-2xl"></i>
+        <h1 class="text-2xl font-bold">Firearm Inventory</h1>
+      </div>
+      <div class="flex items-center space-x-4">
+        <div class="relative">
+          <input type="text" id="search-input" placeholder="Search inventory..." 
+            class="py-1 px-3 pr-8 rounded text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500">
+          <i class="fas fa-search absolute right-2 top-2 text-gray-500"></i>
         </div>
-        
-        <!-- Additional Filters -->
-        <div class="row g-3">
-          <div class="col-md-4">
-            <label for="priceRange" class="form-label">Max Price: $<span id="priceValue">1000</span></label>
-            <input type="range" class="form-range" id="priceRange" min="0" max="2000" step="10" value="1000">
-          </div>
-          
-          <div class="col-md-4">
-            <label for="itemsPerPage" class="form-label">Items Per Page</label>
-            <select id="itemsPerPage" class="form-select">
-              <option value="10">10</option>
-              <option value="25" selected>25</option>
-              <option value="50">50</option>
-              <option value="100">100</option>
-            </select>
-          </div>
-          
-          <div class="col-md-4 d-flex align-items-end">
-            <button id="loadDataBtn" class="btn btn-primary w-100">
-              <i class="bi bi-search"></i> Load Data
-            </button>
-          </div>
-        </div>
-        
-        <!-- Active Filters -->
-        <div id="activeFilters" class="mt-3">
-          <!-- Active filters will be displayed here -->
-        </div>
+        <button id="refresh-btn" class="p-2 rounded hover:bg-primary-700 transition-colors">
+          <i class="fas fa-sync-alt"></i>
+        </button>
       </div>
     </div>
-    
-    <!-- Results Card -->
-    <div class="card">
-      <div class="card-body">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-          <h5 class="card-title mb-0">Inventory Results</h5>
-          <div class="pagination-info">
-            Showing <span id="startItem">0</span>-<span id="endItem">0</span> of <span id="totalItems">0</span> items
-          </div>
-        </div>
-        
-        <!-- Loading Indicator -->
-        <div id="loadingIndicator" class="loading d-none">
-          <div class="spinner-border text-primary" role="status">
-            <span class="visually-hidden">Loading...</span>
-          </div>
-        </div>
-        
-        <!-- Table Container -->
-        <div class="table-responsive">
-          <table id="dataTable" class="table table-striped table-hover">
-            <thead>
-              <tr>
-                <th>Item Number</th>
-                <th>Description</th>
-                <th>Price</th>
-                <th>Category</th>
-                <th>Stock</th>
-              </tr>
-            </thead>
-            <tbody id="tableBody">
-              <!-- Data will be loaded here -->
-              <tr>
-                <td colspan="5" class="text-center">No data available. Please select a date range and click "Load Data".</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        
-        <!-- Pagination -->
-        <nav aria-label="Page navigation" class="mt-3">
-          <ul id="pagination" class="pagination justify-content-center">
-            <!-- Pagination will be generated here -->
-          </ul>
-        </nav>
-      </div>
-    </div>
-  </div>
+  </header>
 
-  <!-- Bootstrap Bundle with Popper -->
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-  
+  <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+    <!-- Status Bar -->
+    <div id="status-bar" class="mb-6 p-4 rounded-lg bg-white shadow-sm hidden">
+      <div class="flex items-center">
+        <div id="status-icon" class="mr-3 text-xl"></div>
+        <div id="status-message" class="text-sm"></div>
+      </div>
+    </div>
+
+    <!-- Debug Panel -->
+    <div id="debug-panel" class="mb-6 p-4 rounded-lg bg-gray-100 border border-gray-200">
+      <div class="flex justify-between items-center mb-2">
+        <h3 class="font-bold text-gray-700">Response Debug</h3>
+        <button id="toggle-raw" class="text-xs px-2 py-1 bg-gray-200 hover:bg-gray-300 rounded">Toggle Raw XML</button>
+      </div>
+      <div id="debug-info" class="text-sm text-gray-600 mb-2"></div>
+      <div id="raw-response" class="text-xs font-mono bg-gray-800 text-green-400 p-3 rounded max-h-40 overflow-auto hidden"></div>
+    </div>
+
+    <!-- Filters -->
+    <div class="mb-6 bg-white p-4 rounded-lg shadow-sm">
+      <div class="flex flex-wrap items-center gap-4">
+        <div class="flex-1">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
+          <select id="sort-select" class="w-full rounded border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500">
+            <option value="name">Name (A-Z)</option>
+            <option value="price-low">Price (Low to High)</option>
+            <option value="price-high">Price (High to Low)</option>
+            <option value="qty-low">Quantity (Low to High)</option>
+            <option value="qty-high">Quantity (High to Low)</option>
+          </select>
+        </div>
+        <div class="flex-1">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Filter By Quantity</label>
+          <select id="qty-filter" class="w-full rounded border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500">
+            <option value="all">All Items</option>
+            <option value="in-stock">In Stock</option>
+            <option value="low-stock">Low Stock (< 5)</option>
+            <option value="out-of-stock">Out of Stock</option>
+          </select>
+        </div>
+        <div class="flex items-end">
+          <button id="apply-filters" class="bg-primary-600 hover:bg-primary-700 text-white py-2 px-4 rounded text-sm transition-colors">
+            Apply Filters
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-primary-500">
+        <div class="text-sm text-gray-500 mb-1">Total Items</div>
+        <div id="total-items" class="text-2xl font-bold">--</div>
+      </div>
+      <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-500">
+        <div class="text-sm text-gray-500 mb-1">In Stock</div>
+        <div id="in-stock" class="text-2xl font-bold">--</div>
+      </div>
+      <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-yellow-500">
+        <div class="text-sm text-gray-500 mb-1">Low Stock</div>
+        <div id="low-stock" class="text-2xl font-bold">--</div>
+      </div>
+      <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-red-500">
+        <div class="text-sm text-gray-500 mb-1">Out of Stock</div>
+        <div id="out-of-stock" class="text-2xl font-bold">--</div>
+      </div>
+    </div>
+
+    <!-- Skeleton Loader -->
+    <div id="skeleton" class="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 mb-6">
+      <!-- Skeleton templates will be inserted here -->
+    </div>
+
+    <!-- Product Grid -->
+    <div id="product-list" class="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"></div>
+
+    <!-- Empty State -->
+    <div id="empty-state" class="hidden text-center py-12">
+      <div class="text-gray-400 text-6xl mb-4">
+        <i class="fas fa-box-open"></i>
+      </div>
+      <h3 class="text-xl font-medium text-gray-700 mb-2">No items found</h3>
+      <p class="text-gray-500 mb-4">Try adjusting your search or filter criteria</p>
+      <button id="reset-filters" class="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700">
+        Reset Filters
+      </button>
+    </div>
+
+    <!-- Load More -->
+    <div class="text-center mt-8">
+      <button id="load-more" class="px-6 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 transition-colors">
+        Load More
+      </button>
+    </div>
+  </main>
+
   <script>
-    // Global variables
-    let allData = [];
-    let filteredData = [];
-    let currentPage = 1;
-    let itemsPerPage = 25;
+    const API_ENDPOINT = "http://localhost:8888/.netlify/functions/dailyItemUpdate";
+    const productList = document.getElementById('product-list');
+    const skeleton = document.getElementById('skeleton');
+    const loadMoreBtn = document.getElementById('load-more');
+    const searchInput = document.getElementById('search-input');
+    const sortSelect = document.getElementById('sort-select');
+    const qtyFilter = document.getElementById('qty-filter');
+    const applyFiltersBtn = document.getElementById('apply-filters');
+    const resetFiltersBtn = document.getElementById('reset-filters');
+    const refreshBtn = document.getElementById('refresh-btn');
+    const emptyState = document.getElementById('empty-state');
+    const statusBar = document.getElementById('status-bar');
+    const statusIcon = document.getElementById('status-icon');
+    const statusMessage = document.getElementById('status-message');
+    const debugInfo = document.getElementById('debug-info');
+    const rawResponse = document.getElementById('raw-response');
+    const toggleRawBtn = document.getElementById('toggle-raw');
     
-    // DOM Elements
-    const startDateInput = document.getElementById('startDate');
-    const endDateInput = document.getElementById('endDate');
-    const searchInput = document.getElementById('searchInput');
-    const priceRangeInput = document.getElementById('priceRange');
-    const priceValueSpan = document.getElementById('priceValue');
-    const itemsPerPageSelect = document.getElementById('itemsPerPage');
-    const loadDataBtn = document.getElementById('loadDataBtn');
-    const loadingIndicator = document.getElementById('loadingIndicator');
-    const tableBody = document.getElementById('tableBody');
-    const paginationElement = document.getElementById('pagination');
-    const startItemSpan = document.getElementById('startItem');
-    const endItemSpan = document.getElementById('endItem');
-    const totalItemsSpan = document.getElementById('totalItems');
-    const activeFiltersDiv = document.getElementById('activeFilters');
-    
-    // Event Listeners
-    document.addEventListener('DOMContentLoaded', () => {
-      loadDataBtn.addEventListener('click', loadData);
-      searchInput.addEventListener('input', applyFilters);
-      priceRangeInput.addEventListener('input', updatePriceValue);
-      itemsPerPageSelect.addEventListener('change', changeItemsPerPage);
+    // Stats elements
+    const totalItemsEl = document.getElementById('total-items');
+    const inStockEl = document.getElementById('in-stock');
+    const lowStockEl = document.getElementById('low-stock');
+    const outOfStockEl = document.getElementById('out-of-stock');
+
+    let allItems = [];
+    let filteredItems = [];
+    let visibleCount = 0;
+    let searchTerm = '';
+    let currentSort = 'name';
+    let currentQtyFilter = 'all';
+    let rawXml = '';
+
+    // Toggle raw XML display
+    toggleRawBtn.addEventListener('click', () => {
+      rawResponse.classList.toggle('hidden');
     });
-    
-    // Update price value display
-    function updatePriceValue() {
-      priceValueSpan.textContent = priceRangeInput.value;
-      applyFilters();
-    }
-    
-    // Change items per page
-    function changeItemsPerPage() {
-      itemsPerPage = parseInt(itemsPerPageSelect.value);
-      currentPage = 1;
-      renderTable();
-    }
-    
-    // Format date for SOAP request
-    function formatDateForSoap(dateString) {
-      const date = new Date(dateString);
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const day = String(date.getDate()).padStart(2, '0');
-      const year = date.getFullYear();
-      return `${month}/${day}/${year}`;
-    }
-    
-    // Load data from API
-    async function loadData() {
-      // Show loading indicator
-      loadingIndicator.classList.remove('d-none');
-      tableBody.innerHTML = '';
+
+    // Show status message
+    function showStatus(type, message) {
+      statusBar.className = 'mb-6 p-4 rounded-lg shadow-sm flex items-center';
+      statusMessage.textContent = message;
       
+      switch(type) {
+        case 'loading':
+          statusBar.classList.add('bg-blue-50', 'border', 'border-blue-200');
+          statusIcon.className = 'mr-3 text-xl text-blue-500 fas fa-circle-notch fa-spin';
+          break;
+        case 'success':
+          statusBar.classList.add('bg-green-50', 'border', 'border-green-200');
+          statusIcon.className = 'mr-3 text-xl text-green-500 fas fa-check-circle';
+          break;
+        case 'error':
+          statusBar.classList.add('bg-red-50', 'border', 'border-red-200');
+          statusIcon.className = 'mr-3 text-xl text-red-500 fas fa-exclamation-circle';
+          break;
+        case 'warning':
+          statusBar.classList.add('bg-yellow-50', 'border', 'border-yellow-200');
+          statusIcon.className = 'mr-3 text-xl text-yellow-500 fas fa-exclamation-triangle';
+          break;
+      }
+      
+      statusBar.classList.remove('hidden');
+      
+      if (type !== 'loading') {
+        setTimeout(() => {
+          statusBar.classList.add('hidden');
+        }, 5000);
+      }
+    }
+
+    // Add skeletons
+    function showSkeleton(count = 8) {
+      skeleton.innerHTML = '';
+      for (let i = 0; i < count; i++) {
+        const skeletonItem = document.createElement('div');
+        skeletonItem.className = 'bg-white p-4 rounded-lg shadow-sm';
+        skeletonItem.innerHTML = `
+          <div class="h-48 shimmer rounded mb-4"></div>
+          <div class="h-5 shimmer rounded w-3/4 mb-3"></div>
+          <div class="h-4 shimmer rounded w-1/2 mb-2"></div>
+          <div class="h-4 shimmer rounded w-2/3 mb-2"></div>
+          <div class="h-6 shimmer rounded w-1/3 mt-3"></div>
+        `;
+        skeleton.appendChild(skeletonItem);
+      }
+    }
+
+    function hideSkeleton() {
+      skeleton.innerHTML = '';
+    }
+
+    // Create product card
+    function createCard(item) {
+      const div = document.createElement('div');
+      div.className = 'bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow fade-in overflow-hidden';
+      
+      // Determine stock status
+      let stockStatus = '';
+      let stockClass = '';
+      const qty = parseInt(item.QTYOH) || 0;
+      
+      if (qty <= 0) {
+        stockStatus = 'Out of Stock';
+        stockClass = 'bg-red-100 text-red-800';
+      } else if (qty < 5) {
+        stockStatus = 'Low Stock';
+        stockClass = 'bg-yellow-100 text-yellow-800';
+      } else {
+        stockStatus = 'In Stock';
+        stockClass = 'bg-green-100 text-green-800';
+      }
+      
+      div.innerHTML = `
+        <div class="relative">
+          <img 
+            src="https://cdn2.cheaperthandirt.com/ctdimages/${item.ITEMNO}.jpg" 
+            alt="${item.IDESC}" 
+            class="w-full h-48 object-contain bg-gray-50 p-2"
+            onerror="this.onerror=null; this.src='/placeholder.svg?height=200&width=200'; this.classList.add('p-8');"
+          >
+          <span class="absolute top-2 right-2 px-2 py-1 text-xs font-medium rounded ${stockClass}">
+            ${stockStatus}
+          </span>
+        </div>
+        <div class="p-4">
+          <h2 class="text-lg font-medium mb-1 line-clamp-2" title="${item.IDESC}">${item.IDESC}</h2>
+          <p class="text-gray-500 text-sm mb-2">Item #: ${item.ITEMNO}</p>
+          <p class="text-gray-600 text-sm mb-3">UPC: ${item.ITUPC || 'N/A'}</p>
+          <div class="flex justify-between items-center">
+            <p class="text-xl font-bold text-primary-700">$${parseFloat(item.PRC1 || 0).toFixed(2)}</p>
+            <p class="text-sm bg-gray-100 px-2 py-1 rounded">Qty: ${item.QTYOH || 0}</p>
+          </div>
+        </div>
+      `;
+      return div;
+    }
+
+    // Update stats
+    function updateStats() {
+      if (allItems.length === 0) return;
+      
+      const total = allItems.length;
+      const inStock = allItems.filter(item => parseInt(item.QTYOH) > 0).length;
+      const lowStock = allItems.filter(item => parseInt(item.QTYOH) > 0 && parseInt(item.QTYOH) < 5).length;
+      const outOfStock = allItems.filter(item => parseInt(item.QTYOH) <= 0).length;
+      
+      totalItemsEl.textContent = total;
+      inStockEl.textContent = inStock;
+      lowStockEl.textContent = lowStock;
+      outOfStockEl.textContent = outOfStock;
+    }
+
+    // Filter and sort items
+    function filterAndSortItems() {
+      // Filter by search term
+      let filtered = allItems;
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase();
+        filtered = filtered.filter(item => 
+          (item.IDESC && item.IDESC.toLowerCase().includes(term)) || 
+          (item.ITEMNO && item.ITEMNO.toLowerCase().includes(term)) || 
+          (item.ITUPC && item.ITUPC.toLowerCase().includes(term))
+        );
+      }
+      
+      // Filter by quantity
+      switch (currentQtyFilter) {
+        case 'in-stock':
+          filtered = filtered.filter(item => parseInt(item.QTYOH) > 0);
+          break;
+        case 'low-stock':
+          filtered = filtered.filter(item => parseInt(item.QTYOH) > 0 && parseInt(item.QTYOH) < 5);
+          break;
+        case 'out-of-stock':
+          filtered = filtered.filter(item => parseInt(item.QTYOH) <= 0);
+          break;
+      }
+      
+      // Sort items
+      filtered.sort((a, b) => {
+        switch (currentSort) {
+          case 'name':
+            return (a.IDESC || '').localeCompare(b.IDESC || '');
+          case 'price-low':
+            return parseFloat(a.PRC1 || 0) - parseFloat(b.PRC1 || 0);
+          case 'price-high':
+            return parseFloat(b.PRC1 || 0) - parseFloat(a.PRC1 || 0);
+          case 'qty-low':
+            return parseInt(a.QTYOH || 0) - parseInt(b.QTYOH || 0);
+          case 'qty-high':
+            return parseInt(b.QTYOH || 0) - parseInt(a.QTYOH || 0);
+          default:
+            return 0;
+        }
+      });
+      
+      return filtered;
+    }
+
+    // Render items
+    function renderItems(count = 12) {
+      // Clear existing items if this is a fresh render
+      if (visibleCount === 0) {
+        productList.innerHTML = '';
+      }
+      
+      const nextItems = filteredItems.slice(visibleCount, visibleCount + count);
+      nextItems.forEach(item => {
+        productList.appendChild(createCard(item));
+      });
+      visibleCount += nextItems.length;
+
+      // Show/hide load more button
+      loadMoreBtn.style.display = visibleCount >= filteredItems.length ? 'none' : 'inline-block';
+      
+      // Show empty state if no items
+      emptyState.classList.toggle('hidden', filteredItems.length > 0);
+      productList.classList.toggle('hidden', filteredItems.length === 0);
+    }
+
+    // Apply filters and refresh the view
+    function applyFilters() {
+      visibleCount = 0;
+      filteredItems = filterAndSortItems();
+      renderItems();
+    }
+
+    // Extract data from SOAP XML response - FIXED VERSION
+    function extractDataFromSoapXml(xmlString) {
       try {
-        const startDate = formatDateForSoap(startDateInput.value);
-        const endDate = formatDateForSoap(endDateInput.value);
+        // Display raw XML for debugging
+        rawResponse.textContent = xmlString;
         
-        // Create SOAP request for the selected date range
-        const soapBody = `<?xml version="1.0" encoding="utf-8"?>
-          <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-                         xmlns:xsd="http://www.w3.org/2001/XMLSchema"
-                         xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-            <soap:Body>
-              <DailyItemUpdateDS xmlns="http://webservices.theshootingwarehouse.com/smart/Inventory.asmx">
-                <CustomerNumber>99994</CustomerNumber>
-                <UserName>99994</UserName>
-                <Password>12345</Password>
-                <LastUpdate>${startDate}</LastUpdate>
-                <LastItem>-1</LastItem>
-                <Source>FPR</Source>
-              </DailyItemUpdateDS>
-            </soap:Body>
-          </soap:Envelope>`;
+        // Create a DOM parser
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(xmlString, "text/xml");
         
-        // Make API request
-        const response = await fetch('http://localhost:8888/.netlify/functions/inventory', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'text/xml'
-          },
-          body: soapBody
-        });
-        
-        if (!response.ok) {
-          throw new Error(`HTTP error! Status: ${response.status}`);
+        // Check for parsing errors
+        const parserError = xmlDoc.querySelector('parsererror');
+        if (parserError) {
+          debugInfo.innerHTML = '<span class="text-red-500">XML parsing error: ' + parserError.textContent + '</span>';
+          return [];
         }
         
-        const result = await response.json();
-        const xml = new window.DOMParser().parseFromString(result.xml, "text/xml");
+        // Based on the screenshot, the structure is:
+        // soap:Envelope > soap:Body > DailyItemUpdateResponse > DailyItemUpdateResult > [XML content with Table elements]
         
-        // Parse XML data
-        const items = Array.from(xml.getElementsByTagName("Table"));
+        let dataContent = '';
         
-        // Process data
-        allData = items.map(item => {
-          const itemNumber = item.getElementsByTagName("ItemNumber")[0]?.textContent || "";
-          const description = item.getElementsByTagName("Description")[0]?.textContent || "";
-          const price = parseFloat(item.getElementsByTagName("Retail")[0]?.textContent || "0");
+        // First, try to find the DailyItemUpdateResult element
+        const updateResult = xmlDoc.querySelector('DailyItemUpdateResult');
+        if (updateResult) {
+          dataContent = updateResult.textContent || updateResult.innerHTML;
+          debugInfo.innerHTML = '<span class="text-blue-500">Found DailyItemUpdateResult element</span>';
+        } else {
+          // Fallback: look for any element that might contain the data
+          const possibleElements = [
+            'DailyItemUpdateResponse',
+            'Body',
+            'soap\\:Body'
+          ];
           
-          // Extract additional data if available
-          const category = item.getElementsByTagName("Category")[0]?.textContent || "N/A";
-          const stock = parseInt(item.getElementsByTagName("QtyOnHand")[0]?.textContent || "0");
+          for (const elementName of possibleElements) {
+            const element = xmlDoc.querySelector(elementName);
+            if (element && element.textContent) {
+              dataContent = element.textContent;
+              debugInfo.innerHTML = `<span class="text-yellow-500">Found data in ${elementName}</span>`;
+              break;
+            }
+          }
+        }
+        
+        if (!dataContent) {
+          debugInfo.innerHTML = '<span class="text-red-500">Could not find data content in SOAP response</span>';
+          return [];
+        }
+        
+        // Now parse the inner XML content that contains the actual data
+        let innerXmlDoc;
+        try {
+          innerXmlDoc = parser.parseFromString(dataContent, "text/xml");
+        } catch (e) {
+          // If it's not valid XML, it might be escaped - try to unescape it
+          const unescapedContent = dataContent
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&amp;/g, '&')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'");
+          
+          try {
+            innerXmlDoc = parser.parseFromString(unescapedContent, "text/xml");
+            debugInfo.innerHTML += '<br><span class="text-green-500">Successfully unescaped XML content</span>';
+          } catch (e2) {
+            debugInfo.innerHTML = '<span class="text-red-500">Failed to parse inner XML content</span>';
+            return [];
+          }
+        }
+        
+        // Now look for Table elements in the inner XML
+        const tables = Array.from(innerXmlDoc.getElementsByTagName("Table"));
+        
+        if (tables.length === 0) {
+          // Try looking for other possible container elements
+          const alternativeContainers = ['NewDataSet', 'DataSet', 'diffgr:diffgram', 'diffgram'];
+          for (const containerName of alternativeContainers) {
+            const container = innerXmlDoc.querySelector(containerName);
+            if (container) {
+              const tablesInContainer = Array.from(container.getElementsByTagName("Table"));
+              if (tablesInContainer.length > 0) {
+                tables.push(...tablesInContainer);
+                debugInfo.innerHTML += `<br><span class="text-green-500">Found ${tablesInContainer.length} items in ${containerName}</span>`;
+                break;
+              }
+            }
+          }
+        }
+        
+        if (tables.length === 0) {
+          debugInfo.innerHTML += '<br><span class="text-red-500">No Table elements found in inner XML</span>';
+          
+          // Show structure of inner XML for debugging
+          const rootElement = innerXmlDoc.documentElement;
+          if (rootElement) {
+            debugInfo.innerHTML += `<br><span class="text-gray-500">Inner XML root: ${rootElement.nodeName}</span>`;
+            const childElements = Array.from(rootElement.children).slice(0, 5).map(el => el.nodeName).join(', ');
+            if (childElements) {
+              debugInfo.innerHTML += `<br><span class="text-gray-500">Child elements: ${childElements}</span>`;
+            }
+          }
+          
+          return [];
+        }
+        
+        debugInfo.innerHTML += `<br><span class="text-green-500">Successfully found ${tables.length} inventory items!</span>`;
+        
+        // Map the table elements to our data format
+        return tables.map(table => {
+          const get = tag => {
+            const element = table.getElementsByTagName(tag)[0];
+            return element ? element.textContent.trim() : '';
+          };
           
           return {
-            itemNumber,
-            description,
-            price,
-            category,
-            stock
+            ITEMNO: get("ITEMNO"),
+            IDESC: get("IDESC"),
+            ITUPC: get("ITUPC"),
+            PRC1: get("PRC1"),
+            QTYOH: get("QTYOH")
           };
         });
         
-        // Apply initial filters
-        applyFilters();
+      } catch (e) {
+        debugInfo.innerHTML = `<span class="text-red-500">Error processing XML: ${e.message}</span>`;
+        console.error("Error processing XML:", e);
+        return [];
+      }
+    }
+
+    // Fetch items from API
+    async function fetchItems() {
+      showStatus('loading', 'Fetching inventory data...');
+      showSkeleton();
+      
+      try {
+        const res = await fetch(API_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            lastUpdate: "6/6/2025",
+            lastItem: -1,
+            source: "FPR"
+          }),
+        });
         
-        // Update active filters display
-        updateActiveFilters();
+        if (!res.ok) {
+          throw new Error(`HTTP error! Status: ${res.status}`);
+        }
         
-      } catch (error) {
-        console.error("Error loading data:", error);
-        tableBody.innerHTML = `
-          <tr>
-            <td colspan="5" class="text-center text-danger">
-              Error loading data. Please try again or check your connection.
-            </td>
-          </tr>
-        `;
+        const json = await res.json();
+        
+        // Check if we have a successful response
+        if (!json.success) {
+          throw new Error(json.message || 'API returned an error');
+        }
+        
+        // Store raw XML for debugging
+        rawXml = json.xml;
+        
+        // Process the XML data
+        allItems = extractDataFromSoapXml(json.xml);
+        
+        if (allItems.length === 0) {
+          showStatus('warning', 'No inventory items found in the data');
+        } else {
+          updateStats();
+          filteredItems = filterAndSortItems();
+          showStatus('success', `Successfully loaded ${allItems.length} inventory items`);
+          renderItems();
+        }
+        
+      } catch (e) {
+        debugInfo.innerHTML = `<span class="text-red-500">Error: ${e.message}</span>`;
+        showStatus('error', `Failed to load inventory: ${e.message}`);
+        console.error(e);
       } finally {
-        // Hide loading indicator
-        loadingIndicator.classList.add('d-none');
+        hideSkeleton();
       }
     }
+
+    // Event Listeners
+    loadMoreBtn.addEventListener('click', () => renderItems(12));
     
-    // Apply filters to data
-    function applyFilters() {
-      const searchTerm = searchInput.value.toLowerCase();
-      const maxPrice = parseInt(priceRangeInput.value);
-      
-      filteredData = allData.filter(item => {
-        // Apply search filter
-        const matchesSearch = 
-          item.itemNumber.toLowerCase().includes(searchTerm) || 
-          item.description.toLowerCase().includes(searchTerm);
-        
-        // Apply price filter
-        const matchesPrice = item.price <= maxPrice;
-        
-        return matchesSearch && matchesPrice;
-      });
-      
-      // Reset to first page when filters change
-      currentPage = 1;
-      
-      // Render table with filtered data
-      renderTable();
-      
-      // Update active filters display
-      updateActiveFilters();
-    }
-    
-    // Update active filters display
-    function updateActiveFilters() {
-      const filters = [];
-      
-      if (searchInput.value) {
-        filters.push(`Search: "${searchInput.value}"`);
-      }
-      
-      if (priceRangeInput.value < 2000) {
-        filters.push(`Max Price: $${priceRangeInput.value}`);
-      }
-      
-      if (filters.length > 0) {
-        activeFiltersDiv.innerHTML = `
-          <div class="mt-2">
-            <strong>Active Filters:</strong> 
-            ${filters.map(filter => `
-              <span class="badge bg-primary filter-badge" onclick="clearFilter('${filter}')">${filter} ✕</span>
-            `).join('')}
-            <button class="btn btn-sm btn-outline-secondary ms-2" onclick="clearAllFilters()">Clear All</button>
-          </div>
-        `;
-      } else {
-        activeFiltersDiv.innerHTML = '';
-      }
-    }
-    
-    // Clear specific filter
-    function clearFilter(filterText) {
-      if (filterText.startsWith('Search:')) {
-        searchInput.value = '';
-      } else if (filterText.startsWith('Max Price:')) {
-        priceRangeInput.value = 2000;
-        priceValueSpan.textContent = '2000';
-      }
-      
+    applyFiltersBtn.addEventListener('click', () => {
+      searchTerm = searchInput.value;
+      currentSort = sortSelect.value;
+      currentQtyFilter = qtyFilter.value;
       applyFilters();
-    }
+    });
     
-    // Clear all filters
-    function clearAllFilters() {
+    resetFiltersBtn.addEventListener('click', () => {
       searchInput.value = '';
-      priceRangeInput.value = 2000;
-      priceValueSpan.textContent = '2000';
-      
+      sortSelect.value = 'name';
+      qtyFilter.value = 'all';
+      searchTerm = '';
+      currentSort = 'name';
+      currentQtyFilter = 'all';
       applyFilters();
-    }
+    });
     
-    // Render table with current page data
-    function renderTable() {
-      if (filteredData.length === 0) {
-        tableBody.innerHTML = `
-          <tr>
-            <td colspan="5" class="text-center">No matching data found.</td>
-          </tr>
-        `;
-        updatePaginationInfo(0, 0, 0);
-        renderPagination(0);
-        return;
+    refreshBtn.addEventListener('click', () => {
+      allItems = [];
+      visibleCount = 0;
+      productList.innerHTML = '';
+      fetchItems();
+    });
+    
+    // Search on enter key
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        searchTerm = searchInput.value;
+        applyFilters();
       }
-      
-      // Calculate pagination
-      const startIndex = (currentPage - 1) * itemsPerPage;
-      const endIndex = Math.min(startIndex + itemsPerPage, filteredData.length);
-      const pageData = filteredData.slice(startIndex, endIndex);
-      
-      // Render table rows
-      tableBody.innerHTML = pageData.map(item => `
-        <tr>
-          <td>${item.itemNumber}</td>
-          <td>${item.description}</td>
-          <td>$${item.price.toFixed(2)}</td>
-          <td>${item.category}</td>
-          <td>${item.stock}</td>
-        </tr>
-      `).join('');
-      
-      // Update pagination info
-      updatePaginationInfo(startIndex + 1, endIndex, filteredData.length);
-      
-      // Render pagination controls
-      renderPagination(Math.ceil(filteredData.length / itemsPerPage));
-    }
-    
-    // Update pagination info text
-    function updatePaginationInfo(start, end, total) {
-      startItemSpan.textContent = start;
-      endItemSpan.textContent = end;
-      totalItemsSpan.textContent = total;
-    }
-    
-    // Render pagination controls
-    function renderPagination(totalPages) {
-      if (totalPages <= 1) {
-        paginationElement.innerHTML = '';
-        return;
-      }
-      
-      let paginationHTML = `
-        <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
-          <a class="page-link" href="#" onclick="changePage(1); return false;">First</a>
-        </li>
-        <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
-          <a class="page-link" href="#" onclick="changePage(${currentPage - 1}); return false;">&laquo;</a>
-        </li>
-      `;
-      
-      // Calculate visible page range
-      const maxVisiblePages = 5;
-      let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-      let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-      
-      // Adjust if we're near the end
-      if (endPage - startPage + 1 < maxVisiblePages) {
-        startPage = Math.max(1, endPage - maxVisiblePages + 1);
-      }
-      
-      // Generate page numbers
-      for (let i = startPage; i <= endPage; i++) {
-        paginationHTML += `
-          <li class="page-item ${i === currentPage ? 'active' : ''}">
-            <a class="page-link" href="#" onclick="changePage(${i}); return false;">${i}</a>
-          </li>
-        `;
-      }
-      
-      paginationHTML += `
-        <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
-          <a class="page-link" href="#" onclick="changePage(${currentPage + 1}); return false;">&raquo;</a>
-        </li>
-        <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
-          <a class="page-link" href="#" onclick="changePage(${totalPages}); return false;">Last</a>
-        </li>
-      `;
-      
-      paginationElement.innerHTML = paginationHTML;
-    }
-    
-    // Change current page
-    function changePage(page) {
-      currentPage = page;
-      renderTable();
-      // Scroll to top of table
-      document.getElementById('dataTable').scrollIntoView({ behavior: 'smooth' });
-    }
-    
-    // Initialize price value display
-    updatePriceValue();
+    });
+
+    // Initialize
+    fetchItems();
   </script>
 </body>
 </html>
