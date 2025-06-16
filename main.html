@@ -145,53 +145,6 @@
         </div>
       </div>
       
-      <!-- Secondary Filters Row -->
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">Manufacturer</label>
-          <select id="manufacturer-filter" class="w-full rounded-lg border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500">
-            <option value="all">All Manufacturers</option>
-            <option value="smith-wesson">Smith & Wesson</option>
-            <option value="glock">Glock</option>
-            <option value="ruger">Ruger</option>
-            <option value="sig-sauer">Sig Sauer</option>
-            <option value="remington">Remington</option>
-            <option value="winchester">Winchester</option>
-            <option value="other">Other</option>
-          </select>
-        </div>
-        
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">Caliber</label>
-          <select id="caliber-filter" class="w-full rounded-lg border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500">
-            <option value="all">All Calibers</option>
-            <option value="9mm">9mm</option>
-            <option value="45acp">.45 ACP</option>
-            <option value="40sw">.40 S&W</option>
-            <option value="380acp">.380 ACP</option>
-            <option value="357mag">.357 Magnum</option>
-            <option value="38special">.38 Special</option>
-            <option value="223rem">.223 Remington</option>
-            <option value="556nato">5.56 NATO</option>
-            <option value="308win">.308 Winchester</option>
-            <option value="other">Other</option>
-          </select>
-        </div>
-        
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">Action Type</label>
-          <select id="action-filter" class="w-full rounded-lg border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500">
-            <option value="all">All Actions</option>
-            <option value="semi-auto">Semi-Automatic</option>
-            <option value="revolver">Revolver</option>
-            <option value="bolt-action">Bolt Action</option>
-            <option value="lever-action">Lever Action</option>
-            <option value="pump-action">Pump Action</option>
-            <option value="single-shot">Single Shot</option>
-          </select>
-        </div>
-      </div>
-      
       <!-- Filter Actions -->
       <div class="flex flex-wrap items-center gap-3">
         <button id="apply-filters" class="bg-primary-600 hover:bg-primary-700 text-white py-2 px-6 rounded-lg text-sm transition-colors flex items-center">
@@ -350,9 +303,6 @@
     const qtyFilter = document.getElementById('qty-filter');
     const categoryFilter = document.getElementById('category-filter');
     const priceFilter = document.getElementById('price-filter');
-    const manufacturerFilter = document.getElementById('manufacturer-filter');
-    const caliberFilter = document.getElementById('caliber-filter');
-    const actionFilter = document.getElementById('action-filter');
     const applyFiltersBtn = document.getElementById('apply-filters');
     const resetFiltersBtn = document.getElementById('reset-filters');
     const resetFiltersEmptyBtn = document.getElementById('reset-filters-empty');
@@ -392,11 +342,88 @@
       sort: 'name',
       quantity: 'all',
       category: 'all',
-      price: 'all',
-      manufacturer: 'all',
-      caliber: 'all',
-      action: 'all'
+      price: 'all'
     };
+
+    // Extract data from SOAP XML response (same as original)
+    function extractDataFromSoapXml(xmlString) {
+      try {
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(xmlString, "text/xml");
+        
+        const parserError = xmlDoc.querySelector('parsererror');
+        if (parserError) {
+          console.error('XML parsing error:', parserError.textContent);
+          return [];
+        }
+        
+        let dataContent = '';
+        const updateResult = xmlDoc.querySelector('DailyItemUpdateResult');
+        if (updateResult) {
+          dataContent = updateResult.textContent || updateResult.innerHTML;
+        }
+        
+        if (!dataContent) {
+          console.error('Could not find data content in SOAP response');
+          return [];
+        }
+        
+        let innerXmlDoc;
+        try {
+          innerXmlDoc = parser.parseFromString(dataContent, "text/xml");
+        } catch (e) {
+          const unescapedContent = dataContent
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&amp;/g, '&')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'");
+          
+          innerXmlDoc = parser.parseFromString(unescapedContent, "text/xml");
+        }
+        
+        const tables = Array.from(innerXmlDoc.getElementsByTagName("Table"));
+        
+        if (tables.length === 0) {
+          const alternativeContainers = ['NewDataSet', 'DataSet', 'diffgr:diffgram', 'diffgram'];
+          for (const containerName of alternativeContainers) {
+            const container = innerXmlDoc.querySelector(containerName);
+            if (container) {
+              const tablesInContainer = Array.from(container.getElementsByTagName("Table"));
+              if (tablesInContainer.length > 0) {
+                tables.push(...tablesInContainer);
+                break;
+              }
+            }
+          }
+        }
+        
+        return tables.map(table => {
+          const get = tag => {
+            const element = table.getElementsByTagName(tag)[0];
+            return element ? element.textContent.trim() : '';
+          };
+          
+          return {
+            ITEMNO: get("ITEMNO"),
+            IDESC: get("IDESC"),
+            ITUPC: get("ITUPC"),
+            PRC1: get("PRC1"),
+            QTYOH: get("QTYOH"),
+            CATEGORY: get("CATEGORY") || "Firearms",
+            MANUFACTURER: get("MANUFACTURER") || "Various",
+            WEIGHT: get("WEIGHT") || "0",
+            CALIBER: get("CALIBER") || "",
+            BARREL_LENGTH: get("BARREL_LENGTH") || "",
+            ACTION_TYPE: get("ACTION_TYPE") || "",
+          };
+        });
+        
+      } catch (e) {
+        console.error("Error processing XML:", e);
+        return [];
+      }
+    }
 
     // Show status message
     function showStatus(type, message) {
@@ -542,8 +569,7 @@
           (item.IDESC && item.IDESC.toLowerCase().includes(term)) || 
           (item.ITEMNO && item.ITEMNO.toLowerCase().includes(term)) || 
           (item.ITUPC && item.ITUPC.toLowerCase().includes(term)) ||
-          (item.CATEGORY && item.CATEGORY.toLowerCase().includes(term)) ||
-          (item.MANUFACTURER && item.MANUFACTURER.toLowerCase().includes(term))
+          (item.CATEGORY && item.CATEGORY.toLowerCase().includes(term))
         );
       }
       
@@ -572,7 +598,6 @@
       
       // Price filter
       if (filters.price !== 'all') {
-        const price = parseFloat(item.PRC1 || 0);
         switch (filters.price) {
           case '0-100':
             filtered = filtered.filter(item => parseFloat(item.PRC1 || 0) <= 100);
@@ -636,9 +661,6 @@
       if (filters.quantity !== 'all') activeFilters.push({ key: 'quantity', label: `Stock: ${filters.quantity}` });
       if (filters.category !== 'all') activeFilters.push({ key: 'category', label: `Category: ${filters.category}` });
       if (filters.price !== 'all') activeFilters.push({ key: 'price', label: `Price: ${filters.price}` });
-      if (filters.manufacturer !== 'all') activeFilters.push({ key: 'manufacturer', label: `Mfg: ${filters.manufacturer}` });
-      if (filters.caliber !== 'all') activeFilters.push({ key: 'caliber', label: `Caliber: ${filters.caliber}` });
-      if (filters.action !== 'all') activeFilters.push({ key: 'action', label: `Action: ${filters.action}` });
       
       activeFilters.forEach(filter => {
         const chip = document.createElement('span');
@@ -670,18 +692,6 @@
         case 'price':
           filters.price = 'all';
           priceFilter.value = 'all';
-          break;
-        case 'manufacturer':
-          filters.manufacturer = 'all';
-          manufacturerFilter.value = 'all';
-          break;
-        case 'caliber':
-          filters.caliber = 'all';
-          caliberFilter.value = 'all';
-          break;
-        case 'action':
-          filters.action = 'all';
-          actionFilter.value = 'all';
           break;
       }
       
@@ -735,7 +745,6 @@
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            lastUpdate: "6/6/2025",
             page: page,
             pageSize: 10
           }),
@@ -751,7 +760,17 @@
           throw new Error(data.message || 'API returned an error');
         }
         
-        const newItems = data.items || [];
+        let newItems = [];
+        
+        // If the API returns items directly, use them
+        if (data.items && Array.isArray(data.items)) {
+          newItems = data.items;
+        } else if (data.xml) {
+          // Otherwise, extract from XML
+          newItems = extractDataFromSoapXml(data.xml);
+          // Limit to 10 items for pagination
+          newItems = newItems.slice(0, 10);
+        }
         
         if (append) {
           allItems = [...allItems, ...newItems];
@@ -760,7 +779,7 @@
           tableBody.innerHTML = '';
         }
         
-        hasMoreItems = data.hasMore && newItems.length === 10;
+        hasMoreItems = data.hasMore !== false && newItems.length === 10;
         currentPage = page;
         
         // Render new items
@@ -847,14 +866,10 @@
                 <label class="block text-sm font-medium text-gray-500">UPC Code</label>
                 <p class="text-lg font-mono">${item.ITUPC || 'N/A'}</p>
               </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-500">Manufacturer</label>
-                <p class="text-lg">${item.MANUFACTURER || 'N/A'}</p>
-              </div>
             </div>
           </div>
           <div class="space-y-4">
-            <h3 class="text-lg font-semibold mb-3 text-gray-800">Pricing & Specifications</h3>
+            <h3 class="text-lg font-semibold mb-3 text-gray-800">Pricing & Availability</h3>
             <div class="bg-gray-50 p-4 rounded-lg space-y-3">
               <div>
                 <label class="block text-sm font-medium text-gray-500">Price</label>
@@ -870,30 +885,6 @@
                   ${stockStatus}
                 </span>
               </div>
-              ${item.CALIBER ? `
-              <div>
-                <label class="block text-sm font-medium text-gray-500">Caliber</label>
-                <p class="text-lg">${item.CALIBER}</p>
-              </div>
-              ` : ''}
-              ${item.BARREL_LENGTH ? `
-              <div>
-                <label class="block text-sm font-medium text-gray-500">Barrel Length</label>
-                <p class="text-lg">${item.BARREL_LENGTH}</p>
-              </div>
-              ` : ''}
-              ${item.ACTION_TYPE ? `
-              <div>
-                <label class="block text-sm font-medium text-gray-500">Action Type</label>
-                <p class="text-lg">${item.ACTION_TYPE}</p>
-              </div>
-              ` : ''}
-              ${item.WEIGHT ? `
-              <div>
-                <label class="block text-sm font-medium text-gray-500">Weight</label>
-                <p class="text-lg">${item.WEIGHT} lbs</p>
-              </div>
-              ` : ''}
             </div>
           </div>
         </div>
@@ -936,9 +927,6 @@
       filters.quantity = qtyFilter.value;
       filters.category = categoryFilter.value;
       filters.price = priceFilter.value;
-      filters.manufacturer = manufacturerFilter.value;
-      filters.caliber = caliberFilter.value;
-      filters.action = actionFilter.value;
       
       applyCurrentFilters();
     });
@@ -949,19 +937,13 @@
       qtyFilter.value = 'all';
       categoryFilter.value = 'all';
       priceFilter.value = 'all';
-      manufacturerFilter.value = 'all';
-      caliberFilter.value = 'all';
-      actionFilter.value = 'all';
       
       filters = {
         search: '',
         sort: 'name',
         quantity: 'all',
         category: 'all',
-        price: 'all',
-        manufacturer: 'all',
-        caliber: 'all',
-        action: 'all'
+        price: 'all'
       };
       
       // Show all loaded items without filters
