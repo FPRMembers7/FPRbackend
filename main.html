@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Firearm Inventory Management</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#fff7ed',
+              100: '#ffedd5',
+              200: '#fed7aa',
+              300: '#fdba74',
+              400: '#fb923c',
+              500: '#f97316',
+              600: '#d2691f',
+              700: '#c2410c',
+              800: '#9a3412',
+              900: '#7c2d12',
+            },
+            secondary:{
+                 50: '#fff7ed'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .fade-in {
+      animation: fadeIn 0.5s ease-in-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .shimmer {
+      background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+    }
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    .modal {
+      backdrop-filter: blur(4px);
+    }
+    .filter-chip {
+      transition: all 0.2s ease;
+    }
+    .filter-chip:hover {
+      transform: translateY(-1px);
+    }
+  </style>
+</head>
+<body class="bg-gray-50 font-sans text-gray-800">
+  <header class="bg-primary-600 text-white shadow-md">
+    <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <i class="fas fa-shield-alt text-2xl"></i>
+        <h1 class="text-2xl font-bold">Firearm Inventory</h1>
+      </div>
+      <div class="flex items-center space-x-4">
+        <div class="relative">
+          <input type="text" id="search-input" placeholder="Search inventory..." 
+            class="py-2 px-4 pr-10 rounded-lg text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500 w-64">
+          <i class="fas fa-search absolute right-3 top-3 text-gray-500"></i>
+        </div>
+        <button id="refresh-btn" class="p-2 rounded-lg hover:bg-primary-700 transition-colors">
+          <i class="fas fa-sync-alt"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+    <!-- Status Bar -->
+    <div id="status-bar" class="mb-6 p-4 rounded-lg bg-white shadow-sm hidden">
+      <div class="flex items-center">
+        <div id="status-icon" class="mr-3 text-xl"></div>
+        <div id="status-message" class="text-sm"></div>
+      </div>
+    </div>
+
+    <!-- Enhanced Filters -->
+    <div class="mb-6 bg-white p-6 rounded-lg shadow-sm">
+      <h3 class="text-lg font-semibold mb-4 text-gray-800">
+        <i class="fas fa-filter mr-2"></i>Filters & Search
+      </h3>
+      
+      <!-- Primary Filters Row -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
+          <select id="sort-select" class="w-full rounded-lg border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500">
+            <option value="name">Name (A-Z)</option>
+            <option value="name-desc">Name (Z-A)</option>
+            <option value="price-low">Price (Low to High)</option>
+            <option value="price-high">Price (High to Low)</option>
+            <option value="qty-low">Quantity (Low to High)</option>
+            <option value="qty-high">Quantity (High to Low)</option>
+            <option value="item-no">Item Number</option>
+          </select>
+        </div>
+        
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Stock Status</label>
+          <select id="qty-filter" class="w-full rounded-lg border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500">
+            <option value="all">All Items</option>
+            <option value="in-stock">In Stock</option>
+            <option value="low-stock">Low Stock (< 5)</option>
+            <option value="out-of-stock">Out of Stock</option>
+            <option value="high-stock">High Stock (≥ 10)</option>
+          </select>
+        </div>
+        
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Category</label>
+          <select id="category-filter" class="w-full rounded-lg border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500">
+            <option value="all">All Categories</option>
+            <option value="firearms">Firearms</option>
+            <option value="ammunition">Ammunition</option>
+            <option value="accessories">Accessories</option>
+            <option value="optics">Optics</option>
+            <option value="parts">Parts</option>
+          </select>
+        </div>
+        
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Price Range</label>
+          <select id="price-filter" class="w-full rounded-lg border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500">
+            <option value="all">All Prices</option>
+            <option value="0-100">$0 - $100</option>
+            <option value="100-500">$100 - $500</option>
+            <option value="500-1000">$500 - $1,000</option>
+            <option value="1000-2000">$1,000 - $2,000</option>
+            <option value="2000+">$2,000+</option>
+          </select>
+        </div>
+      </div>
+      
+      <!-- Secondary Filters Row -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Manufacturer</label>
+          <select id="manufacturer-filter" class="w-full rounded-lg border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500">
+            <option value="all">All Manufacturers</option>
+            <option value="smith-wesson">Smith & Wesson</option>
+            <option value="glock">Glock</option>
+            <option value="ruger">Ruger</option>
+            <option value="sig-sauer">Sig Sauer</option>
+            <option value="remington">Remington</option>
+            <option value="winchester">Winchester</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Caliber</label>
+          <select id="caliber-filter" class="w-full rounded-lg border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500">
+            <option value="all">All Calibers</option>
+            <option value="9mm">9mm</option>
+            <option value="45acp">.45 ACP</option>
+            <option value="40sw">.40 S&W</option>
+            <option value="380acp">.380 ACP</option>
+            <option value="357mag">.357 Magnum</option>
+            <option value="38special">.38 Special</option>
+            <option value="223rem">.223 Remington</option>
+            <option value="556nato">5.56 NATO</option>
+            <option value="308win">.308 Winchester</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Action Type</label>
+          <select id="action-filter" class="w-full rounded-lg border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500">
+            <option value="all">All Actions</option>
+            <option value="semi-auto">Semi-Automatic</option>
+            <option value="revolver">Revolver</option>
+            <option value="bolt-action">Bolt Action</option>
+            <option value="lever-action">Lever Action</option>
+            <option value="pump-action">Pump Action</option>
+            <option value="single-shot">Single Shot</option>
+          </select>
+        </div>
+      </div>
+      
+      <!-- Filter Actions -->
+      <div class="flex flex-wrap items-center gap-3">
+        <button id="apply-filters" class="bg-primary-600 hover:bg-primary-700 text-white py-2 px-6 rounded-lg text-sm transition-colors flex items-center">
+          <i class="fas fa-search mr-2"></i>Apply Filters
+        </button>
+        <button id="reset-filters" class="bg-gray-500 hover:bg-gray-600 text-white py-2 px-6 rounded-lg text-sm transition-colors flex items-center">
+          <i class="fas fa-undo mr-2"></i>Reset All
+        </button>
+        <div id="active-filters" class="flex flex-wrap gap-2 ml-4">
+          <!-- Active filter chips will appear here -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+      <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-primary-500">
+        <div class="text-sm text-gray-500 mb-1">Total Items</div>
+        <div id="total-items" class="text-2xl font-bold">--</div>
+      </div>
+      <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-500">
+        <div class="text-sm text-gray-500 mb-1">In Stock</div>
+        <div id="in-stock" class="text-2xl font-bold">--</div>
+      </div>
+      <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-yellow-500">
+        <div class="text-sm text-gray-500 mb-1">Low Stock</div>
+        <div id="low-stock" class="text-2xl font-bold">--</div>
+      </div>
+      <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-red-500">
+        <div class="text-sm text-gray-500 mb-1">Out of Stock</div>
+        <div id="out-of-stock" class="text-2xl font-bold">--</div>
+      </div>
+      <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-blue-500">
+        <div class="text-sm text-gray-500 mb-1">Loaded</div>
+        <div id="loaded-count" class="text-2xl font-bold">0</div>
+      </div>
+    </div>
+
+    <!-- Skeleton Loader -->
+    <div id="skeleton" class="bg-white rounded-lg shadow-sm overflow-hidden mb-6 hidden">
+      <div class="overflow-x-auto">
+        <table class="min-w-full">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item #</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">UPC</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="skeleton-body" class="bg-white divide-y divide-gray-200">
+            <!-- Skeleton rows will be inserted here -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Inventory Table -->
+    <div id="inventory-table" class="bg-white rounded-lg shadow-sm overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="min-w-full">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item #</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">UPC</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="table-body" class="bg-white divide-y divide-gray-200">
+            <!-- Table rows will be inserted here -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Empty State -->
+    <div id="empty-state" class="hidden text-center py-12 bg-white rounded-lg shadow-sm">
+      <div class="text-gray-400 text-6xl mb-4">
+        <i class="fas fa-box-open"></i>
+      </div>
+      <h3 class="text-xl font-medium text-gray-700 mb-2">No items found</h3>
+      <p class="text-gray-500 mb-4">Try adjusting your search or filter criteria</p>
+      <button id="reset-filters-empty" class="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700">
+        Reset Filters
+      </button>
+    </div>
+
+    <!-- Load More -->
+    <div class="text-center mt-8">
+      <button id="load-more" class="px-8 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors flex items-center mx-auto">
+        <i class="fas fa-plus mr-2"></i>
+        <span id="load-more-text">Show More (Load Next 10)</span>
+      </button>
+      <p class="text-sm text-gray-500 mt-2" id="load-status">Click to load more items from server</p>
+    </div>
+  </main>
+
+  <!-- Item Details Modal -->
+  <div id="item-modal" class="fixed inset-0 bg-black bg-opacity-50 modal hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+      <div class="p-6">
+        <div class="flex justify-between items-center mb-6">
+          <h2 class="text-2xl font-bold text-gray-900">Item Details</h2>
+          <button id="close-modal" class="text-gray-400 hover:text-gray-600 text-2xl">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        
+        <div id="modal-content" class="space-y-6">
+          <!-- Modal content will be inserted here -->
+        </div>
+        
+        <div class="flex gap-3 mt-6 pt-4 border-t">
+          <button id="modal-add-to-cart" class="flex-1 bg-primary-600 hover:bg-primary-700 text-white py-3 px-6 rounded-lg transition-colors">
+            <i class="fas fa-shopping-cart mr-2"></i>
+            Add to Cart
+          </button>
+          <button id="close-modal-btn" class="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cart Success Toast -->
+  <div id="cart-toast" class="fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg transform translate-x-full transition-transform duration-300 z-50">
+    <div class="flex items-center">
+      <i class="fas fa-check-circle mr-2"></i>
+      <span>Item added to cart!</span>
+    </div>
+  </div>
+
+  <script>
+    const API_ENDPOINT = "https://fprbackend.netlify.app/.netlify/functions/inventoryitems";
+    
+    // DOM Elements
+    const tableBody = document.getElementById('table-body');
+    const skeletonBody = document.getElementById('skeleton-body');
+    const skeleton = document.getElementById('skeleton');
+    const inventoryTable = document.getElementById('inventory-table');
+    const loadMoreBtn = document.getElementById('load-more');
+    const loadMoreText = document.getElementById('load-more-text');
+    const loadStatus = document.getElementById('load-status');
+    const searchInput = document.getElementById('search-input');
+    const sortSelect = document.getElementById('sort-select');
+    const qtyFilter = document.getElementById('qty-filter');
+    const categoryFilter = document.getElementById('category-filter');
+    const priceFilter = document.getElementById('price-filter');
+    const manufacturerFilter = document.getElementById('manufacturer-filter');
+    const caliberFilter = document.getElementById('caliber-filter');
+    const actionFilter = document.getElementById('action-filter');
+    const applyFiltersBtn = document.getElementById('apply-filters');
+    const resetFiltersBtn = document.getElementById('reset-filters');
+    const resetFiltersEmptyBtn = document.getElementById('reset-filters-empty');
+    const refreshBtn = document.getElementById('refresh-btn');
+    const emptyState = document.getElementById('empty-state');
+    const statusBar = document.getElementById('status-bar');
+    const statusIcon = document.getElementById('status-icon');
+    const statusMessage = document.getElementById('status-message');
+    const activeFiltersContainer = document.getElementById('active-filters');
+    
+    // Modal elements
+    const itemModal = document.getElementById('item-modal');
+    const closeModal = document.getElementById('close-modal');
+    const closeModalBtn = document.getElementById('close-modal-btn');
+    const modalContent = document.getElementById('modal-content');
+    const modalAddToCart = document.getElementById('modal-add-to-cart');
+    const cartToast = document.getElementById('cart-toast');
+    
+    // Stats elements
+    const totalItemsEl = document.getElementById('total-items');
+    const inStockEl = document.getElementById('in-stock');
+    const lowStockEl = document.getElementById('low-stock');
+    const outOfStockEl = document.getElementById('out-of-stock');
+    const loadedCountEl = document.getElementById('loaded-count');
+
+    // State variables
+    let allItems = [];
+    let filteredItems = [];
+    let currentPage = 1;
+    let isLoading = false;
+    let hasMoreItems = true;
+    let currentModalItem = null;
+    
+    // Filter state
+    let filters = {
+      search: '',
+      sort: 'name',
+      quantity: 'all',
+      category: 'all',
+      price: 'all',
+      manufacturer: 'all',
+      caliber: 'all',
+      action: 'all'
+    };
+
+    // Show status message
+    function showStatus(type, message) {
+      statusBar.className = 'mb-6 p-4 rounded-lg shadow-sm flex items-center';
+      statusMessage.textContent = message;
+      
+      switch(type) {
+        case 'loading':
+          statusBar.classList.add('bg-blue-50', 'border', 'border-blue-200');
+          statusIcon.className = 'mr-3 text-xl text-blue-500 fas fa-circle-notch fa-spin';
+          break;
+        case 'success':
+          statusBar.classList.add('bg-green-50', 'border', 'border-green-200');
+          statusIcon.className = 'mr-3 text-xl text-green-500 fas fa-check-circle';
+          break;
+        case 'error':
+          statusBar.classList.add('bg-red-50', 'border', 'border-red-200');
+          statusIcon.className = 'mr-3 text-xl text-red-500 fas fa-exclamation-circle';
+          break;
+        case 'warning':
+          statusBar.classList.add('bg-yellow-50', 'border', 'border-yellow-200');
+          statusIcon.className = 'mr-3 text-xl text-yellow-500 fas fa-exclamation-triangle';
+          break;
+      }
+      
+      statusBar.classList.remove('hidden');
+      
+      if (type !== 'loading') {
+        setTimeout(() => {
+          statusBar.classList.add('hidden');
+        }, 5000);
+      }
+    }
+
+    // Show skeleton loader
+    function showSkeleton(count = 10) {
+      skeletonBody.innerHTML = '';
+      for (let i = 0; i < count; i++) {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td class="px-6 py-4"><div class="h-4 shimmer rounded w-20"></div></td>
+          <td class="px-6 py-4"><div class="h-4 shimmer rounded w-48"></div></td>
+          <td class="px-6 py-4"><div class="h-4 shimmer rounded w-24"></div></td>
+          <td class="px-6 py-4"><div class="h-4 shimmer rounded w-24"></div></td>
+          <td class="px-6 py-4"><div class="h-4 shimmer rounded w-16"></div></td>
+          <td class="px-6 py-4"><div class="h-4 shimmer rounded w-12"></div></td>
+          <td class="px-6 py-4"><div class="h-6 shimmer rounded w-20"></div></td>
+          <td class="px-6 py-4"><div class="h-8 shimmer rounded w-32"></div></td>
+        `;
+        skeletonBody.appendChild(row);
+      }
+      skeleton.classList.remove('hidden');
+      inventoryTable.classList.add('hidden');
+    }
+
+    function hideSkeleton() {
+      skeleton.classList.add('hidden');
+      inventoryTable.classList.remove('hidden');
+    }
+
+    // Create table row
+    function createTableRow(item) {
+      const row = document.createElement('tr');
+      row.className = 'hover:bg-gray-50 fade-in';
+      
+      // Determine stock status
+      let stockStatus = '';
+      let stockClass = '';
+      const qty = parseInt(item.QTYOH) || 0;
+      
+      if (qty <= 0) {
+        stockStatus = 'Out of Stock';
+        stockClass = 'bg-red-100 text-red-800';
+      } else if (qty < 5) {
+        stockStatus = 'Low Stock';
+        stockClass = 'bg-yellow-100 text-yellow-800';
+      } else {
+        stockStatus = 'In Stock';
+        stockClass = 'bg-green-100 text-green-800';
+      }
+      
+      row.innerHTML = `
+        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${item.ITEMNO}</td>
+        <td class="px-6 py-4 text-sm text-gray-900 max-w-xs truncate" title="${item.IDESC}">${item.IDESC}</td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${item.CATEGORY || 'N/A'}</td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${item.ITUPC || 'N/A'}</td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold text-primary-600">$${parseFloat(item.PRC1 || 0).toFixed(2)}</td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${item.QTYOH || 0}</td>
+        <td class="px-6 py-4 whitespace-nowrap">
+          <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full ${stockClass}">
+            ${stockStatus}
+          </span>
+        </td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+          <div class="flex space-x-2">
+            <button class="view-btn bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs transition-colors">
+              <i class="fas fa-eye mr-1"></i>View
+            </button>
+            <button class="cart-btn bg-primary-600 hover:bg-primary-700 text-white px-3 py-1 rounded text-xs transition-colors ${qty <= 0 ? 'opacity-50 cursor-not-allowed' : ''}">
+              <i class="fas fa-shopping-cart mr-1"></i>Add
+            </button>
+          </div>
+        </td>
+      `;
+      
+      // Add event listeners to buttons
+      const viewBtn = row.querySelector('.view-btn');
+      const cartBtn = row.querySelector('.cart-btn');
+      
+      viewBtn.addEventListener('click', () => openModal(item));
+      
+      if (qty > 0) {
+        cartBtn.addEventListener('click', () => addToCart(item));
+      }
+      
+      return row;
+    }
+
+    // Update stats
+    function updateStats() {
+      if (allItems.length === 0) return;
+      
+      const total = allItems.length;
+      const inStock = allItems.filter(item => parseInt(item.QTYOH) > 0).length;
+      const lowStock = allItems.filter(item => parseInt(item.QTYOH) > 0 && parseInt(item.QTYOH) < 5).length;
+      const outOfStock = allItems.filter(item => parseInt(item.QTYOH) <= 0).length;
+      
+      totalItemsEl.textContent = total;
+      inStockEl.textContent = inStock;
+      lowStockEl.textContent = lowStock;
+      outOfStockEl.textContent = outOfStock;
+      loadedCountEl.textContent = allItems.length;
+    }
+
+    // Apply filters to items
+    function applyFilters(items) {
+      let filtered = [...items];
+      
+      // Search filter
+      if (filters.search) {
+        const term = filters.search.toLowerCase();
+        filtered = filtered.filter(item => 
+          (item.IDESC && item.IDESC.toLowerCase().includes(term)) || 
+          (item.ITEMNO && item.ITEMNO.toLowerCase().includes(term)) || 
+          (item.ITUPC && item.ITUPC.toLowerCase().includes(term)) ||
+          (item.CATEGORY && item.CATEGORY.toLowerCase().includes(term)) ||
+          (item.MANUFACTURER && item.MANUFACTURER.toLowerCase().includes(term))
+        );
+      }
+      
+      // Quantity filter
+      switch (filters.quantity) {
+        case 'in-stock':
+          filtered = filtered.filter(item => parseInt(item.QTYOH) > 0);
+          break;
+        case 'low-stock':
+          filtered = filtered.filter(item => parseInt(item.QTYOH) > 0 && parseInt(item.QTYOH) < 5);
+          break;
+        case 'out-of-stock':
+          filtered = filtered.filter(item => parseInt(item.QTYOH) <= 0);
+          break;
+        case 'high-stock':
+          filtered = filtered.filter(item => parseInt(item.QTYOH) >= 10);
+          break;
+      }
+      
+      // Category filter
+      if (filters.category !== 'all') {
+        filtered = filtered.filter(item => 
+          item.CATEGORY && item.CATEGORY.toLowerCase().includes(filters.category)
+        );
+      }
+      
+      // Price filter
+      if (filters.price !== 'all') {
+        const price = parseFloat(item.PRC1 || 0);
+        switch (filters.price) {
+          case '0-100':
+            filtered = filtered.filter(item => parseFloat(item.PRC1 || 0) <= 100);
+            break;
+          case '100-500':
+            filtered = filtered.filter(item => {
+              const p = parseFloat(item.PRC1 || 0);
+              return p > 100 && p <= 500;
+            });
+            break;
+          case '500-1000':
+            filtered = filtered.filter(item => {
+              const p = parseFloat(item.PRC1 || 0);
+              return p > 500 && p <= 1000;
+            });
+            break;
+          case '1000-2000':
+            filtered = filtered.filter(item => {
+              const p = parseFloat(item.PRC1 || 0);
+              return p > 1000 && p <= 2000;
+            });
+            break;
+          case '2000+':
+            filtered = filtered.filter(item => parseFloat(item.PRC1 || 0) > 2000);
+            break;
+        }
+      }
+      
+      // Sort items
+      filtered.sort((a, b) => {
+        switch (filters.sort) {
+          case 'name':
+            return (a.IDESC || '').localeCompare(b.IDESC || '');
+          case 'name-desc':
+            return (b.IDESC || '').localeCompare(a.IDESC || '');
+          case 'price-low':
+            return parseFloat(a.PRC1 || 0) - parseFloat(b.PRC1 || 0);
+          case 'price-high':
+            return parseFloat(b.PRC1 || 0) - parseFloat(a.PRC1 || 0);
+          case 'qty-low':
+            return parseInt(a.QTYOH || 0) - parseInt(b.QTYOH || 0);
+          case 'qty-high':
+            return parseInt(b.QTYOH || 0) - parseInt(a.QTYOH || 0);
+          case 'item-no':
+            return (a.ITEMNO || '').localeCompare(b.ITEMNO || '');
+          default:
+            return 0;
+        }
+      });
+      
+      return filtered;
+    }
+
+    // Update active filter chips
+    function updateActiveFilters() {
+      activeFiltersContainer.innerHTML = '';
+      
+      const activeFilters = [];
+      
+      if (filters.search) activeFilters.push({ key: 'search', label: `Search: "${filters.search}"` });
+      if (filters.quantity !== 'all') activeFilters.push({ key: 'quantity', label: `Stock: ${filters.quantity}` });
+      if (filters.category !== 'all') activeFilters.push({ key: 'category', label: `Category: ${filters.category}` });
+      if (filters.price !== 'all') activeFilters.push({ key: 'price', label: `Price: ${filters.price}` });
+      if (filters.manufacturer !== 'all') activeFilters.push({ key: 'manufacturer', label: `Mfg: ${filters.manufacturer}` });
+      if (filters.caliber !== 'all') activeFilters.push({ key: 'caliber', label: `Caliber: ${filters.caliber}` });
+      if (filters.action !== 'all') activeFilters.push({ key: 'action', label: `Action: ${filters.action}` });
+      
+      activeFilters.forEach(filter => {
+        const chip = document.createElement('span');
+        chip.className = 'filter-chip inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-primary-100 text-primary-800 cursor-pointer hover:bg-primary-200';
+        chip.innerHTML = `
+          ${filter.label}
+          <i class="fas fa-times ml-2 text-primary-600"></i>
+        `;
+        chip.addEventListener('click', () => removeFilter(filter.key));
+        activeFiltersContainer.appendChild(chip);
+      });
+    }
+
+    // Remove individual filter
+    function removeFilter(filterKey) {
+      switch (filterKey) {
+        case 'search':
+          filters.search = '';
+          searchInput.value = '';
+          break;
+        case 'quantity':
+          filters.quantity = 'all';
+          qtyFilter.value = 'all';
+          break;
+        case 'category':
+          filters.category = 'all';
+          categoryFilter.value = 'all';
+          break;
+        case 'price':
+          filters.price = 'all';
+          priceFilter.value = 'all';
+          break;
+        case 'manufacturer':
+          filters.manufacturer = 'all';
+          manufacturerFilter.value = 'all';
+          break;
+        case 'caliber':
+          filters.caliber = 'all';
+          caliberFilter.value = 'all';
+          break;
+        case 'action':
+          filters.action = 'all';
+          actionFilter.value = 'all';
+          break;
+      }
+      
+      applyCurrentFilters();
+    }
+
+    // Apply current filters and re-render
+    function applyCurrentFilters() {
+      filteredItems = applyFilters(allItems);
+      renderFilteredItems();
+      updateActiveFilters();
+    }
+
+    // Render filtered items
+    function renderFilteredItems() {
+      tableBody.innerHTML = '';
+      
+      if (filteredItems.length === 0) {
+        emptyState.classList.remove('hidden');
+        inventoryTable.classList.add('hidden');
+        loadMoreBtn.style.display = 'none';
+      } else {
+        emptyState.classList.add('hidden');
+        inventoryTable.classList.remove('hidden');
+        
+        filteredItems.forEach(item => {
+          tableBody.appendChild(createTableRow(item));
+        });
+        
+        // Hide load more button when filtering (since we're showing all filtered results)
+        loadMoreBtn.style.display = 'none';
+      }
+    }
+
+    // Fetch items from API
+    async function fetchItems(page = 1, append = false) {
+      if (isLoading) return;
+      
+      isLoading = true;
+      
+      if (!append) {
+        showStatus('loading', `Loading page ${page}...`);
+        showSkeleton();
+      } else {
+        loadMoreText.textContent = 'Loading...';
+        loadMoreBtn.disabled = true;
+      }
+      
+      try {
+        const response = await fetch(API_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            lastUpdate: "6/6/2025",
+            page: page,
+            pageSize: 10
+          }),
+        });
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (!data.success) {
+          throw new Error(data.message || 'API returned an error');
+        }
+        
+        const newItems = data.items || [];
+        
+        if (append) {
+          allItems = [...allItems, ...newItems];
+        } else {
+          allItems = newItems;
+          tableBody.innerHTML = '';
+        }
+        
+        hasMoreItems = data.hasMore && newItems.length === 10;
+        currentPage = page;
+        
+        // Render new items
+        newItems.forEach(item => {
+          tableBody.appendChild(createTableRow(item));
+        });
+        
+        updateStats();
+        updateLoadMoreButton();
+        
+        if (newItems.length === 0 && page === 1) {
+          showStatus('warning', 'No inventory items found');
+          emptyState.classList.remove('hidden');
+          inventoryTable.classList.add('hidden');
+        } else {
+          showStatus('success', `Loaded ${newItems.length} items (Page ${page})`);
+          emptyState.classList.add('hidden');
+          inventoryTable.classList.remove('hidden');
+        }
+        
+      } catch (error) {
+        showStatus('error', `Failed to load inventory: ${error.message}`);
+        console.error(error);
+      } finally {
+        isLoading = false;
+        hideSkeleton();
+        loadMoreBtn.disabled = false;
+        updateLoadMoreButton();
+      }
+    }
+
+    // Update load more button state
+    function updateLoadMoreButton() {
+      if (hasMoreItems && !isLoading) {
+        loadMoreBtn.style.display = 'flex';
+        loadMoreText.textContent = `Show More (Load Next 10)`;
+        loadStatus.textContent = `${allItems.length} items loaded. Click to load more from server.`;
+      } else if (isLoading) {
+        loadMoreText.textContent = 'Loading...';
+        loadStatus.textContent = 'Loading more items...';
+      } else {
+        loadMoreBtn.style.display = 'none';
+        loadStatus.textContent = `All available items loaded (${allItems.length} total).`;
+      }
+    }
+
+    // Modal functionality
+    function openModal(item) {
+      currentModalItem = item;
+      
+      const qty = parseInt(item.QTYOH) || 0;
+      let stockStatus = '';
+      let stockClass = '';
+      
+      if (qty <= 0) {
+        stockStatus = 'Out of Stock';
+        stockClass = 'bg-red-100 text-red-800';
+      } else if (qty < 5) {
+        stockStatus = 'Low Stock';
+        stockClass = 'bg-yellow-100 text-yellow-800';
+      } else {
+        stockStatus = 'In Stock';
+        stockClass = 'bg-green-100 text-green-800';
+      }
+      
+      modalContent.innerHTML = `
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="space-y-4">
+            <h3 class="text-lg font-semibold mb-3 text-gray-800">Product Information</h3>
+            <div class="bg-gray-50 p-4 rounded-lg space-y-3">
+              <div>
+                <label class="block text-sm font-medium text-gray-500">Item Number</label>
+                <p class="text-lg font-mono">${item.ITEMNO}</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-500">Description</label>
+                <p class="text-lg">${item.IDESC}</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-500">Category</label>
+                <p class="text-lg">${item.CATEGORY || 'N/A'}</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-500">UPC Code</label>
+                <p class="text-lg font-mono">${item.ITUPC || 'N/A'}</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-500">Manufacturer</label>
+                <p class="text-lg">${item.MANUFACTURER || 'N/A'}</p>
+              </div>
+            </div>
+          </div>
+          <div class="space-y-4">
+            <h3 class="text-lg font-semibold mb-3 text-gray-800">Pricing & Specifications</h3>
+            <div class="bg-gray-50 p-4 rounded-lg space-y-3">
+              <div>
+                <label class="block text-sm font-medium text-gray-500">Price</label>
+                <p class="text-3xl font-bold text-primary-600">$${parseFloat(item.PRC1 || 0).toFixed(2)}</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-500">Quantity Available</label>
+                <p class="text-xl font-semibold">${item.QTYOH || 0} units</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-500">Status</label>
+                <span class="inline-flex px-3 py-1 text-sm font-medium rounded-full ${stockClass}">
+                  ${stockStatus}
+                </span>
+              </div>
+              ${item.CALIBER ? `
+              <div>
+                <label class="block text-sm font-medium text-gray-500">Caliber</label>
+                <p class="text-lg">${item.CALIBER}</p>
+              </div>
+              ` : ''}
+              ${item.BARREL_LENGTH ? `
+              <div>
+                <label class="block text-sm font-medium text-gray-500">Barrel Length</label>
+                <p class="text-lg">${item.BARREL_LENGTH}</p>
+              </div>
+              ` : ''}
+              ${item.ACTION_TYPE ? `
+              <div>
+                <label class="block text-sm font-medium text-gray-500">Action Type</label>
+                <p class="text-lg">${item.ACTION_TYPE}</p>
+              </div>
+              ` : ''}
+              ${item.WEIGHT ? `
+              <div>
+                <label class="block text-sm font-medium text-gray-500">Weight</label>
+                <p class="text-lg">${item.WEIGHT} lbs</p>
+              </div>
+              ` : ''}
+            </div>
+          </div>
+        </div>
+      `;
+      
+      itemModal.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeModalFunc() {
+      itemModal.classList.add('hidden');
+      document.body.style.overflow = 'auto';
+      currentModalItem = null;
+    }
+
+    function addToCart(item) {
+      console.log('Adding to cart:', item);
+      
+      // Show success toast
+      cartToast.style.transform = 'translateX(0)';
+      setTimeout(() => {
+        cartToast.style.transform = 'translateX(100%)';
+      }, 3000);
+      
+      if (currentModalItem) {
+        closeModalFunc();
+      }
+    }
+
+    // Event Listeners
+    loadMoreBtn.addEventListener('click', () => {
+      if (!isLoading && hasMoreItems) {
+        fetchItems(currentPage + 1, true);
+      }
+    });
+    
+    applyFiltersBtn.addEventListener('click', () => {
+      filters.search = searchInput.value;
+      filters.sort = sortSelect.value;
+      filters.quantity = qtyFilter.value;
+      filters.category = categoryFilter.value;
+      filters.price = priceFilter.value;
+      filters.manufacturer = manufacturerFilter.value;
+      filters.caliber = caliberFilter.value;
+      filters.action = actionFilter.value;
+      
+      applyCurrentFilters();
+    });
+    
+    function resetAllFilters() {
+      searchInput.value = '';
+      sortSelect.value = 'name';
+      qtyFilter.value = 'all';
+      categoryFilter.value = 'all';
+      priceFilter.value = 'all';
+      manufacturerFilter.value = 'all';
+      caliberFilter.value = 'all';
+      actionFilter.value = 'all';
+      
+      filters = {
+        search: '',
+        sort: 'name',
+        quantity: 'all',
+        category: 'all',
+        price: 'all',
+        manufacturer: 'all',
+        caliber: 'all',
+        action: 'all'
+      };
+      
+      // Show all loaded items without filters
+      filteredItems = [...allItems];
+      renderFilteredItems();
+      updateActiveFilters();
+      
+      // Show load more button if there are more items to load
+      if (hasMoreItems) {
+        loadMoreBtn.style.display = 'flex';
+      }
+    }
+    
+    resetFiltersBtn.addEventListener('click', resetAllFilters);
+    resetFiltersEmptyBtn.addEventListener('click', resetAllFilters);
+    
+    refreshBtn.addEventListener('click', () => {
+      allItems = [];
+      filteredItems = [];
+      currentPage = 1;
+      hasMoreItems = true;
+      tableBody.innerHTML = '';
+      resetAllFilters();
+      fetchItems(1);
+    });
+    
+    // Search on enter key
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        applyFiltersBtn.click();
+      }
+    });
+
+    // Modal event listeners
+    closeModal.addEventListener('click', closeModalFunc);
+    closeModalBtn.addEventListener('click', closeModalFunc);
+    modalAddToCart.addEventListener('click', () => {
+      if (currentModalItem) {
+        addToCart(currentModalItem);
+      }
+    });
+
+    // Close modal when clicking outside
+    itemModal.addEventListener('click', (e) => {
+      if (e.target === itemModal) {
+        closeModalFunc();
+      }
+    });
+
+    // Close modal with Escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !itemModal.classList.contains('hidden')) {
+        closeModalFunc();
+      }
+    });
+
+    // Initialize - Load first page
+    fetchItems(1);
+  </script>
+</body>
+</html>
