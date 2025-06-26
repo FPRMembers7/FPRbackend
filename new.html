@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Firearm Inventory Management</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#fff7ed',
+              100: '#ffedd5',
+              200: '#fed7aa',
+              300: '#fdba74',
+              400: '#fb923c',
+              500: '#f97316',
+              600: '#d2691f',
+              700: '#c2410c',
+              800: '#9a3412',
+              900: '#7c2d12',
+            },
+            secondary:{
+                 50: '#fff7ed'
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .fade-in {
+      animation: fadeIn 0.5s ease-in-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .shimmer {
+      background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+    }
+    @keyframes shimmer {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    .modal {
+      backdrop-filter: blur(4px);
+    }
+    .pulse {
+      animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: .5; }
+    }
+  </style>
+</head>
+<body class="bg-gray-50 font-sans text-gray-800">
+  <header class="bg-primary-600 text-white shadow-md">
+    <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
+      <div class="flex items-center space-x-3">
+        <i class="fas fa-shield-alt text-2xl"></i>
+        <h1 class="text-2xl font-bold">Firearm Inventory</h1>
+      </div>
+      <div class="flex items-center space-x-4">
+        <div class="relative">
+          <input type="text" id="search-input" placeholder="Search inventory..." 
+            class="py-1 px-3 pr-8 rounded text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500">
+          <i class="fas fa-search absolute right-2 top-2 text-gray-500"></i>
+        </div>
+        <button id="refresh-btn" class="p-2 rounded hover:bg-primary-700 transition-colors">
+          <i class="fas fa-sync-alt"></i>
+        </button>
+        <button id="debug-btn" class="p-2 rounded hover:bg-primary-700 transition-colors" title="Debug Info">
+          <i class="fas fa-bug"></i>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+    <!-- Connection Status -->
+    <div id="connection-status" class="mb-4 p-3 rounded-lg bg-gray-100 border-l-4 border-gray-400 hidden">
+      <div class="flex items-center">
+        <div id="connection-icon" class="mr-3 text-lg"></div>
+        <div>
+          <div id="connection-message" class="text-sm font-medium"></div>
+          <div id="connection-details" class="text-xs text-gray-600 mt-1"></div>
+        </div>
+        <button id="retry-connection" class="ml-auto px-3 py-1 bg-primary-600 text-white text-xs rounded hover:bg-primary-700 hidden">
+          Retry
+        </button>
+      </div>
+    </div>
+
+    <!-- Status Bar -->
+    <div id="status-bar" class="mb-6 p-4 rounded-lg bg-white shadow-sm hidden">
+      <div class="flex items-center">
+        <div id="status-icon" class="mr-3 text-xl"></div>
+        <div id="status-message" class="text-sm"></div>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="mb-6 bg-white p-4 rounded-lg shadow-sm">
+      <div class="flex flex-wrap items-center gap-4">
+        <div class="flex-1">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
+          <select id="sort-select" class="w-full rounded border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500">
+            <option value="name">Name (A-Z)</option>
+            <option value="price-low">Price (Low to High)</option>
+            <option value="price-high">Price (High to Low)</option>
+            <option value="qty-low">Quantity (Low to High)</option>
+            <option value="qty-high">Quantity (High to Low)</option>
+          </select>
+        </div>
+        <div class="flex-1">
+          <label class="block text-sm font-medium text-gray-700 mb-1">Filter By Quantity</label>
+          <select id="qty-filter" class="w-full rounded border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500">
+            <option value="all">All Items</option>
+            <option value="in-stock">In Stock</option>
+            <option value="low-stock">Low Stock (< 5)</option>
+            <option value="out-of-stock">Out of Stock</option>
+          </select>
+        </div>
+        <div class="flex items-end">
+          <button id="apply-filters" class="bg-primary-600 hover:bg-primary-700 text-white py-2 px-4 rounded text-sm transition-colors">
+            Apply Filters
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-primary-500">
+        <div class="text-sm text-gray-500 mb-1">Total Items</div>
+        <div id="total-items" class="text-2xl font-bold">--</div>
+      </div>
+      <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-500">
+        <div class="text-sm text-gray-500 mb-1">In Stock</div>
+        <div id="in-stock" class="text-2xl font-bold">--</div>
+      </div>
+      <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-yellow-500">
+        <div class="text-sm text-gray-500 mb-1">Low Stock</div>
+        <div id="low-stock" class="text-2xl font-bold">--</div>
+      </div>
+      <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-red-500">
+        <div class="text-sm text-gray-500 mb-1">Out of Stock</div>
+        <div id="out-of-stock" class="text-2xl font-bold">--</div>
+      </div>
+    </div>
+
+    <!-- Skeleton Loader -->
+    <div id="skeleton" class="bg-white rounded-lg shadow-sm overflow-hidden mb-6">
+      <div class="overflow-x-auto">
+        <table class="min-w-full">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item #</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">UPC</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="skeleton-body" class="bg-white divide-y divide-gray-200">
+            <!-- Skeleton rows will be inserted here -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Inventory Table -->
+    <div id="inventory-table" class="bg-white rounded-lg shadow-sm overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="min-w-full">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item #</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">UPC</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="table-body" class="bg-white divide-y divide-gray-200">
+            <!-- Table rows will be inserted here -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Empty State -->
+    <div id="empty-state" class="hidden text-center py-12 bg-white rounded-lg shadow-sm">
+      <div class="text-gray-400 text-6xl mb-4">
+        <i class="fas fa-box-open"></i>
+      </div>
+      <h3 class="text-xl font-medium text-gray-700 mb-2">No items found</h3>
+      <p class="text-gray-500 mb-4">Try adjusting your search or filter criteria</p>
+      <button id="reset-filters" class="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700">
+        Reset Filters
+      </button>
+    </div>
+
+    <!-- Load More -->
+    <div class="text-center mt-8">
+      <button id="load-more" class="px-6 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 transition-colors">
+        Load More
+      </button>
+    </div>
+  </main>
+
+  <!-- Item Details Modal -->
+  <div id="item-modal" class="fixed inset-0 bg-black bg-opacity-50 modal hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div class="p-6">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-2xl font-bold text-gray-900">Item Details</h2>
+          <button id="close-modal" class="text-gray-400 hover:text-gray-600 text-2xl">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        
+        <div id="modal-content" class="space-y-4">
+          <!-- Modal content will be inserted here -->
+        </div>
+        
+        <div class="flex gap-3 mt-6 pt-4 border-t">
+          <button id="modal-add-to-cart" class="flex-1 bg-primary-600 hover:bg-primary-700 text-white py-2 px-4 rounded transition-colors">
+            <i class="fas fa-shopping-cart mr-2"></i>
+            Add to Cart
+          </button>
+          <button id="close-modal-btn" class="px-6 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 transition-colors">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Debug Modal -->
+  <div id="debug-modal" class="fixed inset-0 bg-black bg-opacity-50 modal hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+      <div class="p-6">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-2xl font-bold text-gray-900">Debug Information</h2>
+          <button id="close-debug-modal" class="text-gray-400 hover:text-gray-600 text-2xl">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        
+        <div id="debug-content" class="space-y-4">
+          <!-- Debug content will be inserted here -->
+        </div>
+        
+        <div class="flex gap-3 mt-6 pt-4 border-t">
+          <button id="test-endpoint" class="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded transition-colors">
+            Test Endpoint
+          </button>
+          <button id="clear-debug" class="bg-gray-600 hover:bg-gray-700 text-white py-2 px-4 rounded transition-colors">
+            Clear Logs
+          </button>
+          <button id="close-debug-btn" class="px-6 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 transition-colors">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cart Success Toast -->
+  <div id="cart-toast" class="fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg transform translate-x-full transition-transform duration-300 z-50">
+    <div class="flex items-center">
+      <i class="fas fa-check-circle mr-2"></i>
+      <span>Item added to cart!</span>
+    </div>
+  </div>
+
+  <script>
+    const API_ENDPOINT = "https://fprbackend.netlify.app/.netlify/functions/dailyItemUpdate";
+    const BACKUP_ENDPOINTS = [
+      "/.netlify/functions/dailyItemUpdate", // Local fallback
+      API_ENDPOINT // Original endpoint
+    ];
+    
+    const tableBody = document.getElementById('table-body');
+    const skeletonBody = document.getElementById('skeleton-body');
+    const skeleton = document.getElementById('skeleton');
+    const inventoryTable = document.getElementById('inventory-table');
+    const loadMoreBtn = document.getElementById('load-more');
+    const searchInput = document.getElementById('search-input');
+    const sortSelect = document.getElementById('sort-select');
+    const qtyFilter = document.getElementById('qty-filter');
+    const applyFiltersBtn = document.getElementById('apply-filters');
+    const resetFiltersBtn = document.getElementById('reset-filters');
+    const refreshBtn = document.getElementById('refresh-btn');
+    const debugBtn = document.getElementById('debug-btn');
+    const emptyState = document.getElementById('empty-state');
+    const statusBar = document.getElementById('status-bar');
+    const statusIcon = document.getElementById('status-icon');
+    const statusMessage = document.getElementById('status-message');
+    
+    // Connection status elements
+    const connectionStatus = document.getElementById('connection-status');
+    const connectionIcon = document.getElementById('connection-icon');
+    const connectionMessage = document.getElementById('connection-message');
+    const connectionDetails = document.getElementById('connection-details');
+    const retryConnection = document.getElementById('retry-connection');
+    
+    // Modal elements
+    const itemModal = document.getElementById('item-modal');
+    const closeModal = document.getElementById('close-modal');
+    const closeModalBtn = document.getElementById('close-modal-btn');
+    const modalContent = document.getElementById('modal-content');
+    const modalAddToCart = document.getElementById('modal-add-to-cart');
+    const cartToast = document.getElementById('cart-toast');
+    
+    // Debug modal elements
+    const debugModal = document.getElementById('debug-modal');
+    const closeDebugModal = document.getElementById('close-debug-modal');
+    const closeDebugBtn = document.getElementById('close-debug-btn');
+    const debugContent = document.getElementById('debug-content');
+    const testEndpoint = document.getElementById('test-endpoint');
+    const clearDebug = document.getElementById('clear-debug');
+    
+    // Stats elements
+    const totalItemsEl = document.getElementById('total-items');
+    const inStockEl = document.getElementById('in-stock');
+    const lowStockEl = document.getElementById('low-stock');
+    const outOfStockEl = document.getElementById('out-of-stock');
+
+    let allItems = [];
+    let filteredItems = [];
+    let visibleCount = 0;
+    let searchTerm = '';
+    let currentSort = 'name';
+    let currentQtyFilter = 'all';
+    let currentModalItem = null;
+    let debugLogs = [];
+    let retryCount = 0;
+    const maxRetries = 3;
+
+    // Debug logging
+    function addDebugLog(type, message, details = null) {
+      const timestamp = new Date().toISOString();
+      debugLogs.push({
+        timestamp,
+        type,
+        message,
+        details
+      });
+      console.log(`[${type.toUpperCase()}] ${message}`, details || '');
+    }
+
+    // Connection status management
+    function updateConnectionStatus(status, message, details = '') {
+      connectionStatus.classList.remove('hidden');
+      connectionMessage.textContent = message;
+      connectionDetails.textContent = details;
+      
+      switch(status) {
+        case 'connecting':
+          connectionStatus.className = 'mb-4 p-3 rounded-lg bg-blue-50 border-l-4 border-blue-400';
+          connectionIcon.className = 'mr-3 text-lg text-blue-500 fas fa-circle-notch fa-spin';
+          retryConnection.classList.add('hidden');
+          break;
+        case 'connected':
+          connectionStatus.className = 'mb-4 p-3 rounded-lg bg-green-50 border-l-4 border-green-400';
+          connectionIcon.className = 'mr-3 text-lg text-green-500 fas fa-check-circle';
+          retryConnection.classList.add('hidden');
+          setTimeout(() => connectionStatus.classList.add('hidden'), 3000);
+          break;
+        case 'error':
+          connectionStatus.className = 'mb-4 p-3 rounded-lg bg-red-50 border-l-4 border-red-400';
+          connectionIcon.className = 'mr-3 text-lg text-red-500 fas fa-exclamation-circle';
+          retryConnection.classList.remove('hidden');
+          break;
+        case 'warning':
+          connectionStatus.className = 'mb-4 p-3 rounded-lg bg-yellow-50 border-l-4 border-yellow-400';
+          connectionIcon.className = 'mr-3 text-lg text-yellow-500 fas fa-exclamation-triangle';
+          retryConnection.classList.remove('hidden');
+          break;
+      }
+    }
+
+    // Modal functionality
+    function openModal(item) {
+      currentModalItem = item;
+      
+      const qty = parseInt(item.QTYOH) || 0;
+      let stockStatus = '';
+      let stockClass = '';
+      
+      if (qty <= 0) {
+        stockStatus = 'Out of Stock';
+        stockClass = 'bg-red-100 text-red-800';
+      } else if (qty < 5) {
+        stockStatus = 'Low Stock';
+        stockClass = 'bg-yellow-100 text-yellow-800';
+      } else {
+        stockStatus = 'In Stock';
+        stockClass = 'bg-green-100 text-green-800';
+      }
+      
+      modalContent.innerHTML = `
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <h3 class="text-lg font-semibold mb-3">Product Information</h3>
+            <div class="space-y-3">
+              <div>
+                <label class="block text-sm font-medium text-gray-500">Item Number</label>
+                <p class="text-lg">${item.ITEMNO}</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-500">Description</label>
+                <p class="text-lg">${item.IDESC}</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-500">UPC Code</label>
+                <p class="text-lg">${item.ITUPC || 'N/A'}</p>
+              </div>
+            </div>
+          </div>
+          <div>
+            <h3 class="text-lg font-semibold mb-3">Pricing & Availability</h3>
+            <div class="space-y-3">
+              <div>
+                <label class="block text-sm font-medium text-gray-500">Price</label>
+                <p class="text-2xl font-bold text-primary-600">$${parseFloat(item.PRC1 || 0).toFixed(2)}</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-500">Quantity Available</label>
+                <p class="text-lg">${item.QTYOH || 0} units</p>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-500">Status</label>
+                <span class="inline-flex px-3 py-1 text-sm font-medium rounded-full ${stockClass}">
+                  ${stockStatus}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+      
+      itemModal.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeModalFunc() {
+      itemModal.classList.add('hidden');
+      document.body.style.overflow = 'auto';
+      currentModalItem = null;
+    }
+
+    function addToCart(item) {
+      addDebugLog('info', 'Adding item to cart', item);
+      
+      // Show success toast
+      cartToast.style.transform = 'translateX(0)';
+      setTimeout(() => {
+        cartToast.style.transform = 'translateX(100%)';
+      }, 3000);
+      
+      closeModalFunc();
+    }
+
+    // Debug modal functionality
+    function openDebugModal() {
+      updateDebugContent();
+      debugModal.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeDebugModalFunc() {
+      debugModal.classList.add('hidden');
+      document.body.style.overflow = 'auto';
+    }
+
+    function updateDebugContent() {
+      const recentLogs = debugLogs.slice(-50); // Show last 50 logs
+      
+      debugContent.innerHTML = `
+        <div class="space-y-4">
+          <div>
+            <h3 class="text-lg font-semibold mb-2">System Information</h3>
+            <div class="bg-gray-50 p-3 rounded text-sm">
+              <p><strong>Current Endpoint:</strong> ${API_ENDPOINT}</p>
+              <p><strong>User Agent:</strong> ${navigator.userAgent}</p>
+              <p><strong>Timestamp:</strong> ${new Date().toISOString()}</p>
+              <p><strong>Items Loaded:</strong> ${allItems.length}</p>
+              <p><strong>Retry Count:</strong> ${retryCount}</p>
+            </div>
+          </div>
+          
+          <div>
+            <h3 class="text-lg font-semibold mb-2">Recent Logs</h3>
+            <div class="bg-gray-900 text-green-400 p-3 rounded text-xs font-mono max-h-64 overflow-y-auto">
+              ${recentLogs.length === 0 ? 'No logs available' : 
+                recentLogs.map(log => 
+                  `<div class="mb-1">
+                    <span class="text-gray-400">[${log.timestamp}]</span> 
+                    <span class="text-yellow-400">[${log.type.toUpperCase()}]</span> 
+                    ${log.message}
+                    ${log.details ? `<br><span class="text-blue-400 ml-4">${JSON.stringify(log.details, null, 2)}</span>` : ''}
+                  </div>`
+                ).join('')
+              }
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Show status message
+    function showStatus(type, message) {
+      statusBar.className = 'mb-6 p-4 rounded-lg shadow-sm flex items-center';
+      statusMessage.textContent = message;
+      
+      switch(type) {
+        case 'loading':
+          statusBar.classList.add('bg-blue-50', 'border', 'border-blue-200');
+          statusIcon.className = 'mr-3 text-xl text-blue-500 fas fa-circle-notch fa-spin';
+          break;
+        case 'success':
+          statusBar.classList.add('bg-green-50', 'border', 'border-green-200');
+          statusIcon.className = 'mr-3 text-xl text-green-500 fas fa-check-circle';
+          break;
+        case 'error':
+          statusBar.classList.add('bg-red-50', 'border', 'border-red-200');
+          statusIcon.className = 'mr-3 text-xl text-red-500 fas fa-exclamation-circle';
+          break;
+        case 'warning':
+          statusBar.classList.add('bg-yellow-50', 'border', 'border-yellow-200');
+          statusIcon.className = 'mr-3 text-xl text-yellow-500 fas fa-exclamation-triangle';
+          break;
+      }
+      
+      statusBar.classList.remove('hidden');
+      
+      if (type !== 'loading') {
+        setTimeout(() => {
+          statusBar.classList.add('hidden');
+        }, 5000);
+      }
+    }
+
+    // Add skeleton rows
+    function showSkeleton(count = 10) {
+      skeletonBody.innerHTML = '';
+      for (let i = 0; i < count; i++) {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td class="px-6 py-4"><div class="h-4 shimmer rounded w-20"></div></td>
+          <td class="px-6 py-4"><div class="h-4 shimmer rounded w-48"></div></td>
+          <td class="px-6 py-4"><div class="h-4 shimmer rounded w-24"></div></td>
+          <td class="px-6 py-4"><div class="h-4 shimmer rounded w-16"></div></td>
+          <td class="px-6 py-4"><div class="h-4 shimmer rounded w-12"></div></td>
+          <td class="px-6 py-4"><div class="h-6 shimmer rounded w-20"></div></td>
+          <td class="px-6 py-4"><div class="h-8 shimmer rounded w-32"></div></td>
+        `;
+        skeletonBody.appendChild(row);
+      }
+      skeleton.classList.remove('hidden');
+      inventoryTable.classList.add('hidden');
+    }
+
+    function hideSkeleton() {
+      skeleton.classList.add('hidden');
+      inventoryTable.classList.remove('hidden');
+    }
+
+    // Create table row
+    function createTableRow(item) {
+      const row = document.createElement('tr');
+      row.className = 'hover:bg-gray-50 fade-in';
+      
+      // Determine stock status
+      let stockStatus = '';
+      let stockClass = '';
+      const qty = parseInt(item.QTYOH) || 0;
+      
+      if (qty <= 0) {
+        stockStatus = 'Out of Stock';
+        stockClass = 'bg-red-100 text-red-800';
+      } else if (qty < 5) {
+        stockStatus = 'Low Stock';
+        stockClass = 'bg-yellow-100 text-yellow-800';
+      } else {
+        stockStatus = 'In Stock';
+        stockClass = 'bg-green-100 text-green-800';
+      }
+      
+      row.innerHTML = `
+        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${item.ITEMNO}</td>
+        <td class="px-6 py-4 text-sm text-gray-900 max-w-xs truncate" title="${item.IDESC}">${item.IDESC}</td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${item.ITUPC || 'N/A'}</td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold text-primary-600">$${parseFloat(item.PRC1 || 0).toFixed(2)}</td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${item.QTYOH || 0}</td>
+        <td class="px-6 py-4 whitespace-nowrap">
+          <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full ${stockClass}">
+            ${stockStatus}
+          </span>
+        </td>
+        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+          <div class="flex space-x-2">
+            <button class="view-btn bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs transition-colors">
+              <i class="fas fa-eye mr-1"></i>View
+            </button>
+            <button class="cart-btn bg-primary-600 hover:bg-primary-700 text-white px-3 py-1 rounded text-xs transition-colors ${qty <= 0 ? 'opacity-50 cursor-not-allowed' : ''}">
+              <i class="fas fa-shopping-cart mr-1"></i>Add to Cart
+            </button>
+          </div>
+        </td>
+      `;
+      
+      // Add event listeners to buttons
+      const viewBtn = row.querySelector('.view-btn');
+      const cartBtn = row.querySelector('.cart-btn');
+      
+      viewBtn.addEventListener('click', () => openModal(item));
+      
+      if (qty > 0) {
+        cartBtn.addEventListener('click', () => addToCart(item));
+      }
+      
+      return row;
+    }
+
+    // Update stats
+    function updateStats() {
+      if (allItems.length === 0) return;
+      
+      const total = allItems.length;
+      const inStock = allItems.filter(item => parseInt(item.QTYOH) > 0).length;
+      const lowStock = allItems.filter(item => parseInt(item.QTYOH) > 0 && parseInt(item.QTYOH) < 5).length;
+      const outOfStock = allItems.filter(item => parseInt(item.QTYOH) <= 0).length;
+      
+      totalItemsEl.textContent = total;
+      inStockEl.textContent = inStock;
+      lowStockEl.textContent = lowStock;
+      outOfStockEl.textContent = outOfStock;
+    }
+
+    // Filter and sort items
+    function filterAndSortItems() {
+      // Filter by search term
+      let filtered = allItems;
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase();
+        filtered = filtered.filter(item => 
+          (item.IDESC && item.IDESC.toLowerCase().includes(term)) || 
+          (item.ITEMNO && item.ITEMNO.toLowerCase().includes(term)) || 
+          (item.ITUPC && item.ITUPC.toLowerCase().includes(term))
+        );
+      }
+      
+      // Filter by quantity
+      switch (currentQtyFilter) {
+        case 'in-stock':
+          filtered = filtered.filter(item => parseInt(item.QTYOH) > 0);
+          break;
+        case 'low-stock':
+          filtered = filtered.filter(item => parseInt(item.QTYOH) > 0 && parseInt(item.QTYOH) < 5);
+          break;
+        case 'out-of-stock':
+          filtered = filtered.filter(item => parseInt(item.QTYOH) <= 0);
+          break;
+      }
+      
+      // Sort items
+      filtered.sort((a, b) => {
+        switch (currentSort) {
+          case 'name':
+            return (a.IDESC || '').localeCompare(b.IDESC || '');
+          case 'price-low':
+            return parseFloat(a.PRC1 || 0) - parseFloat(b.PRC1 || 0);
+          case 'price-high':
+            return parseFloat(b.PRC1 || 0) - parseFloat(a.PRC1 || 0);
+          case 'qty-low':
+            return parseInt(a.QTYOH || 0) - parseInt(b.QTYOH || 0);
+          case 'qty-high':
+            return parseInt(b.QTYOH || 0) - parseInt(a.QTYOH || 0);
+          default:
+            return 0;
+        }
+      });
+      
+      return filtered;
+    }
+
+    // Render items
+    function renderItems(count = 20) {
+      // Clear existing items if this is a fresh render
+      if (visibleCount === 0) {
+        tableBody.innerHTML = '';
+      }
+      
+      const nextItems = filteredItems.slice(visibleCount, visibleCount + count);
+      nextItems.forEach(item => {
+        tableBody.appendChild(createTableRow(item));
+      });
+      visibleCount += nextItems.length;
+
+      // Show/hide load more button
+      loadMoreBtn.style.display = visibleCount >= filteredItems.length ? 'none' : 'inline-block';
+      
+      // Show empty state if no items
+      const hasItems = filteredItems.length > 0;
+      emptyState.classList.toggle('hidden', hasItems);
+      inventoryTable.classList.toggle('hidden', !hasItems);
+    }
+
+    // Apply filters and refresh the view
+    function applyFilters() {
+      visibleCount = 0;
+      filteredItems = filterAndSortItems();
+      renderItems();
+    }
+
+    // Extract data from SOAP XML response
+    function extractDataFromSoapXml(xmlString) {
+      try {
+        addDebugLog('info', 'Starting XML parsing', { xmlLength: xmlString.length });
+        
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(xmlString, "text/xml");
+        
+        const parserError = xmlDoc.querySelector('parsererror');
+        if (parserError) {
+          addDebugLog('error', 'XML parsing error', parserError.textContent);
+          return [];
+        }
+        
+        let dataContent = '';
+        const updateResult = xmlDoc.querySelector('DailyItemUpdateResult');
+        if (updateResult) {
+          dataContent = updateResult.textContent || updateResult.innerHTML;
+        }
+        
+        if (!dataContent) {
+          addDebugLog('error', 'Could not find data content in SOAP response');
+          return [];
+        }
+        
+        let innerXmlDoc;
+        try {
+          innerXmlDoc = parser.parseFromString(dataContent, "text/xml");
+        } catch (e) {
+          const unescapedContent = dataContent
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&amp;/g, '&')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'");
+          
+          innerXmlDoc = parser.parseFromString(unescapedContent, "text/xml");
+        }
+        
+        const tables = Array.from(innerXmlDoc.getElementsByTagName("Table"));
+        
+        if (tables.length === 0) {
+          const alternativeContainers = ['NewDataSet', 'DataSet', 'diffgr:diffgram', 'diffgram'];
+          for (const containerName of alternativeContainers) {
+            const container = innerXmlDoc.querySelector(containerName);
+            if (container) {
+              const tablesInContainer = Array.from(container.getElementsByTagName("Table"));
+              if (tablesInContainer.length > 0) {
+                tables.push(...tablesInContainer);
+                break;
+              }
+            }
+          }
+        }
+        
+        const items = tables.map(table => {
+          const get = tag => {
+            const element = table.getElementsByTagName(tag)[0];
+            return element ? element.textContent.trim() : '';
+          };
+          
+          return {
+            ITEMNO: get("ITEMNO"),
+            IDESC: get("IDESC"),
+            ITUPC: get("ITUPC"),
+            PRC1: get("PRC1"),
+            QTYOH: get("QTYOH")
+          };
+        });
+        
+        addDebugLog('success', 'XML parsing completed', { itemCount: items.length });
+        return items;
+        
+      } catch (e) {
+        addDebugLog('error', 'Error processing XML', e.message);
+        return [];
+      }
+    }
+
+    // Test endpoint connectivity
+    async function testEndpoint(endpoint = API_ENDPOINT) {
+      addDebugLog('info', 'Testing endpoint', endpoint);
+      
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+        
+        const response = await fetch(endpoint, {
+          method: 'HEAD', // Use HEAD to test connectivity without full request
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        addDebugLog('info', 'Endpoint test result', {
+          status: response.status,
+          statusText: response.statusText,
+          headers: Object.fromEntries(response.headers.entries())
+        });
+        
+        return {
+          success: response.ok,
+          status: response.status,
+          statusText: response.statusText
+        };
+        
+      } catch (error) {
+        addDebugLog('error', 'Endpoint test failed', error.message);
+        return {
+          success: false,
+          error: error.message
+        };
+      }
+    }
+
+    // Fetch items from API with retry logic
+    async function fetchItems(endpoint = API_ENDPOINT) {
+      addDebugLog('info', 'Starting fetch request', { endpoint, retryCount });
+      
+      updateConnectionStatus('connecting', 'Connecting to inventory system...', `Attempt ${retryCount + 1} of ${maxRetries + 1}`);
+      showStatus('loading', 'Fetching inventory data...');
+      showSkeleton();
+      
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+        
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { 
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+          },
+          body: JSON.stringify({
+            lastUpdate: "1/1/1990",
+            lastItem: -1,
+            source: "FPR"
+          }),
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        addDebugLog('info', 'Fetch response received', {
+          status: res.status,
+          statusText: res.statusText,
+          headers: Object.fromEntries(res.headers.entries())
+        });
+        
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        }
+        
+        const json = await res.json();
+        addDebugLog('info', 'JSON response parsed', { success: json.success });
+        
+        if (!json.success) {
+          throw new Error(json.message || 'API returned an error');
+        }
+        
+        allItems = extractDataFromSoapXml(json.xml);
+        
+        if (allItems.length === 0) {
+          updateConnectionStatus('warning', 'Connected but no data found', 'The API responded successfully but returned no inventory items');
+          showStatus('warning', 'No inventory items found in the data');
+        } else {
+          updateConnectionStatus('connected', 'Successfully connected', `Loaded ${allItems.length} items`);
+          updateStats();
+          filteredItems = filterAndSortItems();
+          showStatus('success', `Successfully loaded ${allItems.length} inventory items`);
+          renderItems();
+          retryCount = 0; // Reset retry count on success
+        }
+        
+      } catch (error) {
+        addDebugLog('error', 'Fetch failed', {
+          message: error.message,
+          name: error.name,
+          stack: error.stack
+        });
+        
+        // Handle specific error types
+        let errorMessage = 'Failed to load inventory';
+        let errorDetails = error.message;
+        
+        if (error.name === 'AbortError') {
+          errorMessage = 'Request timed out';
+          errorDetails = 'The server took too long to respond. This might indicate server issues.';
+        } else if (error.message.includes('503')) {
+          errorMessage = 'Service temporarily unavailable (503)';
+          errorDetails = 'The Netlify function may be down or experiencing issues. Try again in a few minutes.';
+        } else if (error.message.includes('Failed to fetch')) {
+          errorMessage = 'Network connection failed';
+          errorDetails = 'Check your internet connection or the server may be unreachable.';
+        }
+        
+        updateConnectionStatus('error', errorMessage, errorDetails);
+        showStatus('error', `${errorMessage}: ${errorDetails}`);
+        
+        // Retry logic
+        if (retryCount < maxRetries) {
+          retryCount++;
+          addDebugLog('info', 'Retrying request', { retryCount, maxRetries });
+          setTimeout(() => fetchItems(endpoint), 2000 * retryCount); // Exponential backoff
+        } else {
+          addDebugLog('error', 'Max retries reached', { retryCount, maxRetries });
+        }
+        
+      } finally {
+        hideSkeleton();
+      }
+    }
+
+    // Event Listeners
+    loadMoreBtn.addEventListener('click', () => renderItems(20));
+    
+    applyFiltersBtn.addEventListener('click', () => {
+      searchTerm = searchInput.value;
+      currentSort = sortSelect.value;
+      currentQtyFilter = qtyFilter.value;
+      applyFilters();
+    });
+    
+    resetFiltersBtn.addEventListener('click', () => {
+      searchInput.value = '';
+      sortSelect.value = 'name';
+      qtyFilter.value = 'all';
+      searchTerm = '';
+      currentSort = 'name';
+      currentQtyFilter = 'all';
+      applyFilters();
+    });
+    
+    refreshBtn.addEventListener('click', () => {
+      allItems = [];
+      visibleCount = 0;
+      retryCount = 0;
+      tableBody.innerHTML = '';
+      fetchItems();
+    });
+    
+    debugBtn.addEventListener('click', openDebugModal);
+    
+    retryConnection.addEventListener('click', () => {
+      retryCount = 0;
+      fetchItems();
+    });
+    
+    // Modal event listeners
+    closeModal.addEventListener('click', closeModalFunc);
+    closeModalBtn.addEventListener('click', closeModalFunc);
+    modalAddToCart.addEventListener('click', () => {
+      if (currentModalItem) {
+        addToCart(currentModalItem);
+      }
+    });
+    
+    // Debug modal event listeners
+    closeDebugModal.addEventListener('click', closeDebugModalFunc);
+    closeDebugBtn.addEventListener('click', closeDebugModalFunc);
+    testEndpoint.addEventListener('click', async () => {
+      const result = await testEndpoint();
+      addDebugLog('info', 'Manual endpoint test completed', result);
+      updateDebugContent();
+    });
+    clearDebug.addEventListener('click', () => {
+      debugLogs = [];
+      updateDebugContent();
+    });
+    
+    // Close modals when clicking outside
+    itemModal.addEventListener('click', (e) => {
+      if (e.target === itemModal) {
+        closeModalFunc();
+      }
+    });
+    
+    debugModal.addEventListener('click', (e) => {
+      if (e.target === debugModal) {
+        closeDebugModalFunc();
+      }
+    });
+    
+    // Close modals with Escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        if (!itemModal.classList.contains('hidden')) {
+          closeModalFunc();
+        }
+        if (!debugModal.classList.contains('hidden')) {
+          closeDebugModalFunc();
+        }
+      }
+    });
+    
+    // Search on enter key
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        searchTerm = searchInput.value;
+        applyFilters();
+      }
+    });
+
+    // Initialize
+    addDebugLog('info', 'Application initialized');
+    fetchItems();
+  </script>
+</body>
+</html>
