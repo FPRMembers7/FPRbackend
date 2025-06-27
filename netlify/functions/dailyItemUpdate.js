@@ -15,7 +15,7 @@ exports.handler = async function (event, context) {
   }
 
   // Optional: Pull params from frontend (POST body)
-  const { lastUpdate = "1/1/1990", lastItem = -1 } = JSON.parse(event.body || "{}");
+  const { lastUpdate = "1/6/2025", lastItem = -1 } = JSON.parse(event.body || "{}");
 
   const soapBody = `<?xml version="1.0" encoding="utf-8"?>
   <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
