@@ -1,1122 +1,282 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Firearm Inventory Management</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            primary: {
-              50: '#fff7ed',
-              100: '#ffedd5',
-              200: '#fed7aa',
-              300: '#fdba74',
-              400: '#fb923c',
-              500: '#f97316',
-              600: '#d2691f',
-              700: '#c2410c',
-              800: '#9a3412',
-              900: '#7c2d12',
-            },
-            secondary:{
-                 50: '#fff7ed'
-            }
-          }
-        }
-      }
+const axios = require("axios")
+const https = require("https")
+
+// Simple XML parser function to avoid external dependencies
+function parseXMLResponse(xmlString, resultTag) {
+  try {
+    // Simple regex-based parsing for SOAP responses
+    const regex = new RegExp(`<${resultTag}[^>]*>([^<]*)<\/${resultTag}>`, "i")
+    const match = xmlString.match(regex)
+    return match ? match[1].trim() : null
+  } catch (e) {
+    console.error("Error parsing XML:", e)
+    return null
+  }
+}
+
+function extractOrderNumber(xmlString) {
+  const result = parseXMLResponse(xmlString, "AddHeaderResult")
+  return result ? Number.parseInt(result) || 0 : 0
+}
+
+function extractBooleanResult(xmlString) {
+  const addDetailResult = parseXMLResponse(xmlString, "AddDetailResult")
+  const submitResult = parseXMLResponse(xmlString, "SubmitResult")
+
+  const result = addDetailResult || submitResult
+  return result ? result.toLowerCase() === "true" || result === "1" : false
+}
+
+exports.handler = async (event, context) => {
+  // Set CORS headers
+  const headers = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+  }
+
+  // Handle preflight requests
+  if (event.httpMethod === "OPTIONS") {
+    return {
+      statusCode: 200,
+      headers,
+      body: "",
     }
-  </script>
-  <style>
-    .fade-in {
-      animation: fadeIn 0.5s ease-in-out;
+  }
+
+  if (event.httpMethod !== "POST") {
+    return {
+      statusCode: 405,
+      headers,
+      body: JSON.stringify({ message: "Method Not Allowed" }),
     }
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(10px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    .shimmer {
-      background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-      background-size: 200% 100%;
-      animation: shimmer 1.5s infinite;
-    }
-    @keyframes shimmer {
-      0% { background-position: -200% 0; }
-      100% { background-position: 200% 0; }
-    }
-    .modal {
-      backdrop-filter: blur(4px);
-    }
-    .category-tab {
-      transition: all 0.3s ease;
-    }
-    .category-tab.active {
-      background-color: #f97316;
-      color: white;
-    }
-  </style>
-</head>
-<body class="bg-gray-50 font-sans text-gray-800">
-  <header class="bg-primary-600 text-white shadow-md">
-    <div class="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-      <div class="flex items-center space-x-3">
-        <i class="fas fa-shield-alt text-2xl"></i>
-        <h1 class="text-2xl font-bold">Firearm Inventory</h1>
-      </div>
-      <div class="flex items-center space-x-4">
-        <div class="relative">
-          <input type="text" id="search-input" placeholder="Search inventory..." 
-            class="py-1 px-3 pr-8 rounded text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-primary-500">
-          <i class="fas fa-search absolute right-2 top-2 text-gray-500"></i>
-        </div>
-        <button id="refresh-btn" class="p-2 rounded hover:bg-primary-700 transition-colors">
-          <i class="fas fa-sync-alt"></i>
-        </button>
-      </div>
-    </div>
-  </header>
+  }
 
-  <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-    <!-- Status Bar -->
-    <div id="status-bar" class="mb-6 p-4 rounded-lg bg-white shadow-sm hidden">
-      <div class="flex items-center">
-        <div id="status-icon" class="mr-3 text-xl"></div>
-        <div id="status-message" class="text-sm"></div>
-      </div>
-    </div>
+  try {
+    const data = JSON.parse(event.body)
+    const { orderData, items, credentials } = data
 
-    <!-- Category Tabs -->
-    <div class="mb-6 bg-white p-4 rounded-lg shadow-sm">
-      <h3 class="text-lg font-semibold mb-3">Categories</h3>
-      <div class="flex flex-wrap gap-2" id="category-tabs">
-        <button class="category-tab px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-sm font-medium" data-category="all">
-          All Products
-        </button>
-        <button class="category-tab px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-sm font-medium" data-category="firearms">
-          <i class="fas fa-crosshairs mr-1"></i>Firearms
-        </button>
-        <button class="category-tab px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-sm font-medium" data-category="ammo">
-          <i class="fas fa-bullseye mr-1"></i>Ammo
-        </button>
-        <button class="category-tab px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-sm font-medium" data-category="optics">
-          <i class="fas fa-eye mr-1"></i>Optics
-        </button>
-        <button class="category-tab px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-sm font-medium" data-category="accessories">
-          <i class="fas fa-tools mr-1"></i>Accessories
-        </button>
-        <button class="category-tab px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-sm font-medium" data-category="gear">
-          <i class="fas fa-backpack mr-1"></i>Gear & Supplies
-        </button>
-      </div>
-    </div>
-
-    <!-- Pagination Controls -->
-    <div class="mb-6 bg-white p-4 rounded-lg shadow-sm">
-      <div class="flex flex-wrap items-center gap-4">
-        <div class="flex-1">
-          <label class="block text-sm font-medium text-gray-700 mb-1">Items Per Page</label>
-          <select id="items-per-page" class="w-full rounded border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500">
-            <option value="5">5 items</option>
-            <option value="10" selected>10 items</option>
-            <option value="20">20 items</option>
-          </select>
-        </div>
-        <div class="flex-1">
-          <label class="block text-sm font-medium text-gray-700 mb-1">Date Range (Days)</label>
-          <select id="date-range" class="w-full rounded border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500">
-            <option value="2" selected>2 days</option>
-            <option value="7">7 days</option>
-            <option value="30">30 days</option>
-            <option value="-1">All items</option>
-          </select>
-        </div>
-        <div class="flex-1">
-          <label class="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
-          <select id="sort-select" class="w-full rounded border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500">
-            <option value="category">Category (Firearms First)</option>
-            <option value="name">Name (A-Z)</option>
-            <option value="price-low">Price (Low to High)</option>
-            <option value="price-high">Price (High to Low)</option>
-            <option value="qty-low">Quantity (Low to High)</option>
-            <option value="qty-high">Quantity (High to Low)</option>
-          </select>
-        </div>
-        <div class="flex items-end">
-          <button id="apply-filters" class="bg-primary-600 hover:bg-primary-700 text-white py-2 px-4 rounded text-sm transition-colors">
-            Apply Filters
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Stats Cards -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-      <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-primary-500">
-        <div class="text-sm text-gray-500 mb-1">Total Items</div>
-        <div id="total-items" class="text-2xl font-bold">--</div>
-      </div>
-      <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-blue-500">
-        <div class="text-sm text-gray-500 mb-1">Firearms</div>
-        <div id="firearms-count" class="text-2xl font-bold">--</div>
-      </div>
-      <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-green-500">
-        <div class="text-sm text-gray-500 mb-1">In Stock</div>
-        <div id="in-stock" class="text-2xl font-bold">--</div>
-      </div>
-      <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-yellow-500">
-        <div class="text-sm text-gray-500 mb-1">Low Stock</div>
-        <div id="low-stock" class="text-2xl font-bold">--</div>
-      </div>
-      <div class="bg-white p-4 rounded-lg shadow-sm border-l-4 border-red-500">
-        <div class="text-sm text-gray-500 mb-1">Out of Stock</div>
-        <div id="out-of-stock" class="text-2xl font-bold">--</div>
-      </div>
-    </div>
-
-    <!-- Skeleton Loader -->
-    <div id="skeleton" class="bg-white rounded-lg shadow-sm overflow-hidden mb-6">
-      <div class="overflow-x-auto">
-        <table class="min-w-full">
-          <thead class="bg-gray-50">
-            <tr>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Image</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">UPC</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-            </tr>
-          </thead>
-          <tbody id="skeleton-body" class="bg-white divide-y divide-gray-200">
-            <!-- Skeleton rows will be inserted here -->
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Inventory Table -->
-    <div id="inventory-table" class="bg-white rounded-lg shadow-sm overflow-hidden">
-      <div class="overflow-x-auto">
-        <table class="min-w-full">
-          <thead class="bg-gray-50">
-            <tr>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Image</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">UPC</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-            </tr>
-          </thead>
-          <tbody id="table-body" class="bg-white divide-y divide-gray-200">
-            <!-- Table rows will be inserted here -->
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Empty State -->
-    <div id="empty-state" class="hidden text-center py-12 bg-white rounded-lg shadow-sm">
-      <div class="text-gray-400 text-6xl mb-4">
-        <i class="fas fa-box-open"></i>
-      </div>
-      <h3 class="text-xl font-medium text-gray-700 mb-2">No items found</h3>
-      <p class="text-gray-500 mb-4">Try adjusting your search or filter criteria</p>
-      <button id="reset-filters" class="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700">
-        Reset Filters
-      </button>
-    </div>
-
-    <!-- Pagination -->
-    <div class="flex justify-between items-center mt-8">
-      <div class="text-sm text-gray-500">
-        Showing <span id="showing-from">0</span> to <span id="showing-to">0</span> of <span id="total-filtered">0</span> items
-      </div>
-      <div class="flex space-x-2">
-        <button id="prev-page" class="px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-          <i class="fas fa-chevron-left mr-1"></i>Previous
-        </button>
-        <button id="next-page" class="px-4 py-2 bg-primary-600 text-white rounded hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-          Next<i class="fas fa-chevron-right ml-1"></i>
-        </button>
-      </div>
-    </div>
-  </main>
-
-  <!-- Item Details Modal -->
-  <div id="item-modal" class="fixed inset-0 bg-black bg-opacity-50 modal hidden z-50 flex items-center justify-center p-4">
-    <div class="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-      <div class="p-6">
-        <div class="flex justify-between items-center mb-4">
-          <h2 class="text-2xl font-bold text-gray-900">Item Details</h2>
-          <button id="close-modal" class="text-gray-400 hover:text-gray-600 text-2xl">
-            <i class="fas fa-times"></i>
-          </button>
-        </div>
-        
-        <div id="modal-content" class="space-y-4">
-          <!-- Modal content will be inserted here -->
-        </div>
-        
-        <div class="flex gap-3 mt-6 pt-4 border-t">
-          <button id="modal-add-to-cart" class="flex-1 bg-primary-600 hover:bg-primary-700 text-white py-2 px-4 rounded transition-colors">
-            <i class="fas fa-shopping-cart mr-2"></i>
-            Add to Cart
-          </button>
-          <button id="close-modal-btn" class="px-6 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 transition-colors">
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Cart Success Toast -->
-  <div id="cart-toast" class="fixed top-4 right-4 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg transform translate-x-full transition-transform duration-300 z-50">
-    <div class="flex items-center">
-      <i class="fas fa-check-circle mr-2"></i>
-      <span>Item added to cart!</span>
-    </div>
-  </div>
-
-  <!-- Cart Sidebar -->
-<div id="cart-sidebar" class="fixed right-0 top-0 h-full w-96 bg-white shadow-lg transform translate-x-full transition-transform duration-300 z-50 overflow-y-auto">
-  <div class="p-6">
-    <div class="flex justify-between items-center mb-4">
-      <h2 class="text-2xl font-bold text-gray-900">Shopping Cart</h2>
-      <button id="close-cart" class="text-gray-400 hover:text-gray-600 text-2xl">
-        <i class="fas fa-times"></i>
-      </button>
-    </div>
-    
-    <div id="cart-items" class="space-y-4 mb-6">
-      <!-- Cart items will be inserted here -->
-    </div>
-    
-    <div class="border-t pt-4">
-      <div class="flex justify-between items-center mb-4">
-        <span class="text-lg font-semibold">Total:</span>
-        <span id="cart-total" class="text-2xl font-bold text-primary-600">$0.00</span>
-      </div>
-      <button id="checkout-btn" class="w-full bg-primary-600 hover:bg-primary-700 text-white py-3 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-        <i class="fas fa-credit-card mr-2"></i>
-        Proceed to Checkout
-      </button>
-      <button id="clear-cart" class="w-full mt-2 bg-gray-300 hover:bg-gray-400 text-gray-700 py-2 px-4 rounded-lg transition-colors">
-        Clear Cart
-      </button>
-    </div>
-  </div>
-</div>
-
-<!-- Checkout Modal -->
-<div id="checkout-modal" class="fixed inset-0 bg-black bg-opacity-50 modal hidden z-50 flex items-center justify-center p-4">
-  <div class="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-    <div class="p-6">
-      <div class="flex justify-between items-center mb-4">
-        <h2 class="text-2xl font-bold text-gray-900">Checkout</h2>
-        <button id="close-checkout" class="text-gray-400 hover:text-gray-600 text-2xl">
-          <i class="fas fa-times"></i>
-        </button>
-      </div>
-      
-      <form id="checkout-form" class="space-y-4">
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
-            <input type="text" id="ship-name" required class="w-full rounded border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
-            <input type="tel" id="ship-phone" required class="w-full rounded border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500">
-          </div>
-        </div>
-        
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Address Line 1 *</label>
-          <input type="text" id="ship-addr1" required class="w-full rounded border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500">
-        </div>
-        
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Address Line 2</label>
-          <input type="text" id="ship-addr2" class="w-full rounded border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500">
-        </div>
-        
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">City *</label>
-            <input type="text" id="ship-city" required class="w-full rounded border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500">
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">State *</label>
-            <select id="ship-state" required class="w-full rounded border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500">
-              <option value="">Select State</option>
-              <option value="AL">Alabama</option>
-              <option value="AK">Alaska</option>
-              <option value="AZ">Arizona</option>
-              <option value="AR">Arkansas</option>
-              <option value="CA">California</option>
-              <option value="CO">Colorado</option>
-              <option value="CT">Connecticut</option>
-              <option value="DE">Delaware</option>
-              <option value="FL">Florida</option>
-              <option value="GA">Georgia</option>
-              <option value="HI">Hawaii</option>
-              <option value="ID">Idaho</option>
-              <option value="IL">Illinois</option>
-              <option value="IN">Indiana</option>
-              <option value="IA">Iowa</option>
-              <option value="KS">Kansas</option>
-              <option value="KY">Kentucky</option>
-              <option value="LA">Louisiana</option>
-              <option value="ME">Maine</option>
-              <option value="MD">Maryland</option>
-              <option value="MA">Massachusetts</option>
-              <option value="MI">Michigan</option>
-              <option value="MN">Minnesota</option>
-              <option value="MS">Mississippi</option>
-              <option value="MO">Missouri</option>
-              <option value="MT">Montana</option>
-              <option value="NE">Nebraska</option>
-              <option value="NV">Nevada</option>
-              <option value="NH">New Hampshire</option>
-              <option value="NJ">New Jersey</option>
-              <option value="NM">New Mexico</option>
-              <option value="NY">New York</option>
-              <option value="NC">North Carolina</option>
-              <option value="ND">North Dakota</option>
-              <option value="OH">Ohio</option>
-              <option value="OK">Oklahoma</option>
-              <option value="OR">Oregon</option>
-              <option value="PA">Pennsylvania</option>
-              <option value="RI">Rhode Island</option>
-              <option value="SC">South Carolina</option>
-              <option value="SD">South Dakota</option>
-              <option value="TN">Tennessee</option>
-              <option value="TX">Texas</option>
-              <option value="UT">Utah</option>
-              <option value="VT">Vermont</option>
-              <option value="VA">Virginia</option>
-              <option value="WA">Washington</option>
-              <option value="WV">West Virginia</option>
-              <option value="WI">Wisconsin</option>
-              <option value="WY">Wyoming</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">ZIP Code *</label>
-            <input type="text" id="ship-zip" required pattern="[0-9]{5}" class="w-full rounded border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500">
-          </div>
-        </div>
-        
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Order Notes</label>
-          <textarea id="order-notes" rows="3" class="w-full rounded border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500"></textarea>
-        </div>
-        
-        <div class="border-t pt-4">
-          <div class="flex justify-between items-center mb-4">
-            <span class="text-lg font-semibold">Order Total:</span>
-            <span id="checkout-total" class="text-2xl font-bold text-primary-600">$0.00</span>
-          </div>
-          
-          <div class="flex gap-3">
-            <button type="submit" id="place-order-btn" class="flex-1 bg-primary-600 hover:bg-primary-700 text-white py-3 px-4 rounded-lg transition-colors">
-              <i class="fas fa-shopping-cart mr-2"></i>
-              Place Order
-            </button>
-            <button type="button" id="cancel-checkout" class="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors">
-              Cancel
-            </button>
-          </div>
-        </div>
-      </form>
-    </div>
-  </div>
-</div>
-
-<!-- Cart Button (Fixed Position) -->
-<div class="fixed bottom-4 right-4 z-40">
-  <button id="cart-toggle" class="bg-primary-600 hover:bg-primary-700 text-white p-4 rounded-full shadow-lg transition-colors relative">
-    <i class="fas fa-shopping-cart text-xl"></i>
-    <span id="cart-count" class="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full h-6 w-6 flex items-center justify-center hidden">0</span>
-  </button>
-</div>
-
-  <script>
-    const API_ENDPOINT = "https://fprbackend.netlify.app/.netlify/functions/dailyItemUpdate";
-    const tableBody = document.getElementById('table-body');
-    const skeletonBody = document.getElementById('skeleton-body');
-    const skeleton = document.getElementById('skeleton');
-    const inventoryTable = document.getElementById('inventory-table');
-    const searchInput = document.getElementById('search-input');
-    const sortSelect = document.getElementById('sort-select');
-    const applyFiltersBtn = document.getElementById('apply-filters');
-    const resetFiltersBtn = document.getElementById('reset-filters');
-    const refreshBtn = document.getElementById('refresh-btn');
-    const emptyState = document.getElementById('empty-state');
-    const statusBar = document.getElementById('status-bar');
-    const statusIcon = document.getElementById('status-icon');
-    const statusMessage = document.getElementById('status-message');
-    const itemsPerPageSelect = document.getElementById('items-per-page');
-    const dateRangeSelect = document.getElementById('date-range');
-    const categoryTabs = document.getElementById('category-tabs');
-    const prevPageBtn = document.getElementById('prev-page');
-    const nextPageBtn = document.getElementById('next-page');
-    const showingFrom = document.getElementById('showing-from');
-    const showingTo = document.getElementById('showing-to');
-    const totalFiltered = document.getElementById('total-filtered');
-    
-    // Modal elements
-    const itemModal = document.getElementById('item-modal');
-    const closeModal = document.getElementById('close-modal');
-    const closeModalBtn = document.getElementById('close-modal-btn');
-    const modalContent = document.getElementById('modal-content');
-    const modalAddToCart = document.getElementById('modal-add-to-cart');
-    const cartToast = document.getElementById('cart-toast');
-    
-    // Stats elements
-    const totalItemsEl = document.getElementById('total-items');
-    const firearmsCountEl = document.getElementById('firearms-count');
-    const inStockEl = document.getElementById('in-stock');
-    const lowStockEl = document.getElementById('low-stock');
-    const outOfStockEl = document.getElementById('out-of-stock');
-
-    let allItems = [];
-    let filteredItems = [];
-    let currentPage = 1;
-    let itemsPerPage = 10;
-    let searchTerm = '';
-    let currentSort = 'category';
-    let currentCategory = 'all';
-    let currentModalItem = null;
-
-    // Category mapping based on item description keywords
-    const categoryKeywords = {
-      firearms: [
-        'rifle', 'pistol', 'shotgun', 'handgun', 'revolver', 'carbine', 'ar-15', 'ak-47',
-        'glock', 'smith & wesson', 'ruger', 'remington', 'winchester', 'savage',
-        'beretta', 'sig sauer', 'colt', 'springfield', 'mossberg', 'benelli',
-        'firearm', 'gun', 'upper', 'lower', 'receiver', 'barrel', 'frame'
-      ],
-      ammo: [
-        'ammo', 'ammunition', 'cartridge', 'bullet', 'round', 'brass', 'shell',
-        '9mm', '.45', '.40', '.380', '.22', '.223', '.308', '.30-06', '.270',
-        '12 gauge', '20 gauge', '.410', 'rimfire', 'centerfire', 'hollow point',
-        'fmj', 'full metal jacket', 'grain', 'gr'
-      ],
-      optics: [
-        'scope', 'sight', 'optic', 'red dot', 'holographic', 'reflex',
-        'binocular', 'rangefinder', 'night vision', 'thermal', 'magnifier',
-        'mount', 'ring', 'base', 'rail', 'picatinny', 'weaver'
-      ],
-      accessories: [
-        'holster', 'sling', 'bipod', 'grip', 'stock', 'foregrip', 'light',
-        'laser', 'suppressor', 'silencer', 'muzzle', 'brake', 'compensator',
-        'trigger', 'safety', 'magazine', 'clip', 'speed loader'
-      ],
-      gear: [
-        'case', 'bag', 'backpack', 'vest', 'belt', 'pouch', 'cleaning',
-        'maintenance', 'tool', 'kit', 'safe', 'lock', 'cable', 'apparel',
-        'clothing', 'glove', 'ear protection', 'eye protection'
-      ]
-    };
-
-    // Determine item category
-    function getItemCategory(item) {
-      const description = (item.IDESC || '').toLowerCase();
-      
-      for (const [category, keywords] of Object.entries(categoryKeywords)) {
-        if (keywords.some(keyword => description.includes(keyword))) {
-          return category;
-        }
-      }
-      
-      return 'accessories'; // Default category
-    }
-
-    // Calculate date for pagination
-    function calculateLastUpdateDate(daysBack) {
-      if (daysBack === -1) return "1/1/1999"; // All items
-      
-      const date = new Date();
-      date.setDate(date.getDate() - daysBack);
-      return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
-    }
-
-    // Modal functionality
-    function openModal(item) {
-      currentModalItem = item;
-      
-      const qty = parseInt(item.QTYOH) || 0;
-      let stockStatus = '';
-      let stockClass = '';
-      
-      if (qty <= 0) {
-        stockStatus = 'Out of Stock';
-        stockClass = 'bg-red-100 text-red-800';
-      } else if (qty < 5) {
-        stockStatus = 'Low Stock';
-        stockClass = 'bg-yellow-100 text-yellow-800';
-      } else {
-        stockStatus = 'In Stock';
-        stockClass = 'bg-green-100 text-green-800';
-      }
-      
-      const category = getItemCategory(item);
-      const categoryDisplay = category.charAt(0).toUpperCase() + category.slice(1);
-      
-      modalContent.innerHTML = `
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <h3 class="text-lg font-semibold mb-3">Product Information</h3>
-            <div class="space-y-3">
-              <div>
-                <img src="https://media.server.theshootingwarehouse.com/hires/${item.ITEMNO}.png" 
-                     alt="${item.IDESC}" 
-                     class="w-full h-48 object-contain bg-gray-50 rounded"
-                     onerror="this.src='https://via.placeholder.com/300x200?text=No+Image'">
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-500">Category</label>
-                <p class="text-lg font-medium text-primary-600">${categoryDisplay}</p>
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-500">Description</label>
-                <p class="text-lg">${item.IDESC}</p>
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-500">UPC Code</label>
-                <p class="text-lg">${item.ITUPC || 'N/A'}</p>
-              </div>
-            </div>
-          </div>
-          <div>
-            <h3 class="text-lg font-semibold mb-3">Pricing & Availability</h3>
-            <div class="space-y-3">
-              <div>
-                <label class="block text-sm font-medium text-gray-500">Price</label>
-                <p class="text-2xl font-bold text-primary-600">$${parseFloat(item.PRC1 || 0).toFixed(2)}</p>
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-500">Quantity Available</label>
-                <p class="text-lg">${item.QTYOH || 0} units</p>
-              </div>
-              <div>
-                <label class="block text-sm font-medium text-gray-500">Status</label>
-                <span class="inline-flex px-3 py-1 text-sm font-medium rounded-full ${stockClass}">
-                  ${stockStatus}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      `;
-      
-      itemModal.classList.remove('hidden');
-      document.body.style.overflow = 'hidden';
-    }
-
-    function closeModalFunc() {
-      itemModal.classList.add('hidden');
-      document.body.style.overflow = 'auto';
-      currentModalItem = null;
-    }
-
-    function addToCart(item) {
-      console.log('Adding to cart:', item);
-      
-      cartToast.style.transform = 'translateX(0)';
-      setTimeout(() => {
-        cartToast.style.transform = 'translateX(100%)';
-      }, 3000);
-      
-      closeModalFunc();
-    }
-
-    // Modal event listeners
-    closeModal.addEventListener('click', closeModalFunc);
-    closeModalBtn.addEventListener('click', closeModalFunc);
-    modalAddToCart.addEventListener('click', () => {
-      if (currentModalItem) {
-        addToCart(currentModalItem);
-      }
-    });
-
-    itemModal.addEventListener('click', (e) => {
-      if (e.target === itemModal) {
-        closeModalFunc();
-      }
-    });
-
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && !itemModal.classList.contains('hidden')) {
-        closeModalFunc();
-      }
-    });
-
-    // Show status message
-    function showStatus(type, message) {
-      statusBar.className = 'mb-6 p-4 rounded-lg shadow-sm flex items-center';
-      statusMessage.textContent = message;
-      
-      switch(type) {
-        case 'loading':
-          statusBar.classList.add('bg-blue-50', 'border', 'border-blue-200');
-          statusIcon.className = 'mr-3 text-xl text-blue-500 fas fa-circle-notch fa-spin';
-          break;
-        case 'success':
-          statusBar.classList.add('bg-green-50', 'border', 'border-green-200');
-          statusIcon.className = 'mr-3 text-xl text-green-500 fas fa-check-circle';
-          break;
-        case 'error':
-          statusBar.classList.add('bg-red-50', 'border', 'border-red-200');
-          statusIcon.className = 'mr-3 text-xl text-red-500 fas fa-exclamation-circle';
-          break;
-        case 'warning':
-          statusBar.classList.add('bg-yellow-50', 'border', 'border-yellow-200');
-          statusIcon.className = 'mr-3 text-xl text-yellow-500 fas fa-exclamation-triangle';
-          break;
-      }
-      
-      statusBar.classList.remove('hidden');
-      
-      if (type !== 'loading') {
-        setTimeout(() => {
-          statusBar.classList.add('hidden');
-        }, 5000);
+    if (!orderData || !items || !credentials) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({ message: "Missing orderData, items, or credentials" }),
       }
     }
 
-    // Add skeleton rows
-    function showSkeleton(count = 10) {
-      skeletonBody.innerHTML = '';
-      for (let i = 0; i < count; i++) {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-          <td class="px-6 py-4"><div class="h-12 w-12 shimmer rounded"></div></td>
-          <td class="px-6 py-4"><div class="h-4 shimmer rounded w-48"></div></td>
-          <td class="px-6 py-4"><div class="h-4 shimmer rounded w-24"></div></td>
-          <td class="px-6 py-4"><div class="h-4 shimmer rounded w-16"></div></td>
-          <td class="px-6 py-4"><div class="h-4 shimmer rounded w-12"></div></td>
-          <td class="px-6 py-4"><div class="h-6 shimmer rounded w-20"></div></td>
-          <td class="px-6 py-4"><div class="h-8 shimmer rounded w-32"></div></td>
-        `;
-        skeletonBody.appendChild(row);
-      }
-      skeleton.classList.remove('hidden');
-      inventoryTable.classList.add('hidden');
-    }
+    console.log("Processing order with data:", { orderData, itemCount: items.length })
 
-    function hideSkeleton() {
-      skeleton.classList.add('hidden');
-      inventoryTable.classList.remove('hidden');
-    }
+    // Step 1: Add Order Header
+    const headerResult = await addOrderHeader(orderData, credentials)
 
-    // Create table row
-    function createTableRow(item) {
-      const row = document.createElement('tr');
-      row.className = 'hover:bg-gray-50 fade-in';
-      
-      const qty = parseInt(item.QTYOH) || 0;
-      let stockStatus = '';
-      let stockClass = '';
-      
-      if (qty <= 0) {
-        stockStatus = 'Out of Stock';
-        stockClass = 'bg-red-100 text-red-800';
-      } else if (qty < 5) {
-        stockStatus = 'Low Stock';
-        stockClass = 'bg-yellow-100 text-yellow-800';
-      } else {
-        stockStatus = 'In Stock';
-        stockClass = 'bg-green-100 text-green-800';
-      }
-      
-      const category = getItemCategory(item);
-      const categoryDisplay = category.charAt(0).toUpperCase() + category.slice(1);
-      
-      // Category color coding
-      let categoryClass = 'bg-gray-100 text-gray-800';
-      switch(category) {
-        case 'firearms':
-          categoryClass = 'bg-red-100 text-red-800';
-          break;
-        case 'ammo':
-          categoryClass = 'bg-yellow-100 text-yellow-800';
-          break;
-        case 'optics':
-          categoryClass = 'bg-blue-100 text-blue-800';
-          break;
-        case 'accessories':
-          categoryClass = 'bg-green-100 text-green-800';
-          break;
-        case 'gear':
-          categoryClass = 'bg-purple-100 text-purple-800';
-          break;
-      }
-      
-      row.innerHTML = `
-        <td class="px-6 py-4 whitespace-nowrap">
-          <img src="https://media.server.theshootingwarehouse.com/thumbnail/${item.ITEMNO}.jpg" 
-               alt="${item.IDESC}" 
-               class="h-12 w-12 object-contain bg-gray-50 rounded"
-               onerror="this.src='https://via.placeholder.com/48x48?text=No+Image'">
-        </td>
-        <td class="px-6 py-4 whitespace-nowrap">
-          <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full ${categoryClass}">
-            ${categoryDisplay}
-          </span>
-        </td>
-        <td class="px-6 py-4 text-sm text-gray-900 max-w-xs truncate" title="${item.IDESC}">${item.IDESC}</td>
-        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${item.ITUPC || 'N/A'}</td>
-        <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold text-primary-600">$${parseFloat(item.PRC1 || 0).toFixed(2)}</td>
-        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${item.QTYOH || 0}</td>
-        <td class="px-6 py-4 whitespace-nowrap">
-          <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full ${stockClass}">
-            ${stockStatus}
-          </span>
-        </td>
-        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-          <div class="flex space-x-2">
-            <button class="view-btn bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-xs transition-colors">
-              <i class="fas fa-eye mr-1"></i>View
-            </button>
-            <button class="cart-btn bg-primary-600 hover:bg-primary-700 text-white px-3 py-1 rounded text-xs transition-colors ${qty <= 0 ? 'opacity-50 cursor-not-allowed' : ''}">
-              <i class="fas fa-shopping-cart mr-1"></i>Add to Cart
-            </button>
-          </div>
-        </td>
-      `;
-      
-      const viewBtn = row.querySelector('.view-btn');
-      const cartBtn = row.querySelector('.cart-btn');
-      
-      viewBtn.addEventListener('click', () => openModal(item));
-      
-      if (qty > 0) {
-        cartBtn.addEventListener('click', () => addToCart(item));
-      }
-      
-      return row;
-    }
-
-    // Update stats
-    function updateStats() {
-      if (allItems.length === 0) return;
-      
-      const total = allItems.length;
-      const firearms = allItems.filter(item => getItemCategory(item) === 'firearms').length;
-      const inStock = allItems.filter(item => parseInt(item.QTYOH) > 0).length;
-      const lowStock = allItems.filter(item => parseInt(item.QTYOH) > 0 && parseInt(item.QTYOH) < 5).length;
-      const outOfStock = allItems.filter(item => parseInt(item.QTYOH) <= 0).length;
-      
-      totalItemsEl.textContent = total;
-      firearmsCountEl.textContent = firearms;
-      inStockEl.textContent = inStock;
-      lowStockEl.textContent = lowStock;
-      outOfStockEl.textContent = outOfStock;
-    }
-
-    // Filter and sort items
-    function filterAndSortItems() {
-      let filtered = allItems;
-      
-      // Filter by search term
-      if (searchTerm) {
-        const term = searchTerm.toLowerCase();
-        filtered = filtered.filter(item => 
-          (item.IDESC && item.IDESC.toLowerCase().includes(term)) || 
-          (item.ITEMNO && item.ITEMNO.toLowerCase().includes(term)) || 
-          (item.ITUPC && item.ITUPC.toLowerCase().includes(term))
-        );
-      }
-      
-      // Filter by category
-      if (currentCategory !== 'all') {
-        filtered = filtered.filter(item => getItemCategory(item) === currentCategory);
-      }
-      
-      // Sort items
-      filtered.sort((a, b) => {
-        switch (currentSort) {
-          case 'category':
-            const catA = getItemCategory(a);
-            const catB = getItemCategory(b);
-            // Prioritize firearms
-            if (catA === 'firearms' && catB !== 'firearms') return -1;
-            if (catB === 'firearms' && catA !== 'firearms') return 1;
-            if (catA !== catB) return catA.localeCompare(catB);
-            return (a.IDESC || '').localeCompare(b.IDESC || '');
-          case 'name':
-            return (a.IDESC || '').localeCompare(b.IDESC || '');
-          case 'price-low':
-            return parseFloat(a.PRC1 || 0) - parseFloat(b.PRC1 || 0);
-          case 'price-high':
-            return parseFloat(b.PRC1 || 0) - parseFloat(a.PRC1 || 0);
-          case 'qty-low':
-            return parseInt(a.QTYOH || 0) - parseInt(b.QTYOH || 0);
-          case 'qty-high':
-            return parseInt(b.QTYOH || 0) - parseInt(a.QTYOH || 0);
-          default:
-            return 0;
-        }
-      });
-      
-      return filtered;
-    }
-
-    // Render items with pagination
-    function renderItems() {
-      tableBody.innerHTML = '';
-      
-      const startIndex = (currentPage - 1) * itemsPerPage;
-      const endIndex = startIndex + itemsPerPage;
-      const pageItems = filteredItems.slice(startIndex, endIndex);
-      
-      pageItems.forEach(item => {
-        tableBody.appendChild(createTableRow(item));
-      });
-      
-      // Update pagination info
-      showingFrom.textContent = filteredItems.length > 0 ? startIndex + 1 : 0;
-      showingTo.textContent = Math.min(endIndex, filteredItems.length);
-      totalFiltered.textContent = filteredItems.length;
-      
-      // Update pagination buttons
-      prevPageBtn.disabled = currentPage <= 1;
-      nextPageBtn.disabled = endIndex >= filteredItems.length;
-      
-      // Show empty state if no items
-      const hasItems = filteredItems.length > 0;
-      emptyState.classList.toggle('hidden', hasItems);
-      inventoryTable.classList.toggle('hidden', !hasItems);
-    }
-
-    // Apply filters and refresh the view
-    function applyFilters() {
-      currentPage = 1;
-      filteredItems = filterAndSortItems();
-      renderItems();
-    }
-
-    // Category tab functionality
-    categoryTabs.addEventListener('click', (e) => {
-      if (e.target.classList.contains('category-tab')) {
-        // Remove active class from all tabs
-        document.querySelectorAll('.category-tab').forEach(tab => {
-          tab.classList.remove('active');
-        });
-        
-        // Add active class to clicked tab
-        e.target.classList.add('active');
-        
-        // Set current category
-        currentCategory = e.target.dataset.category;
-        applyFilters();
-      }
-    });
-
-    // Pagination event listeners
-    prevPageBtn.addEventListener('click', () => {
-      if (currentPage > 1) {
-        currentPage--;
-        renderItems();
-      }
-    });
-
-    nextPageBtn.addEventListener('click', () => {
-      const maxPage = Math.ceil(filteredItems.length / itemsPerPage);
-      if (currentPage < maxPage) {
-        currentPage++;
-        renderItems();
-      }
-    });
-
-    // Items per page change
-    itemsPerPageSelect.addEventListener('change', () => {
-      itemsPerPage = parseInt(itemsPerPageSelect.value);
-      currentPage = 1;
-      renderItems();
-    });
-
-    // Extract data from SOAP XML response
-    function extractDataFromSoapXml(xmlString) {
-      try {
-        const parser = new DOMParser();
-        const xmlDoc = parser.parseFromString(xmlString, "text/xml");
-        
-        const parserError = xmlDoc.querySelector('parsererror');
-        if (parserError) {
-          console.error('XML parsing error:', parserError.textContent);
-          return [];
-        }
-        
-        let dataContent = '';
-        const updateResult = xmlDoc.querySelector('DailyItemUpdateResult');
-        if (updateResult) {
-          dataContent = updateResult.textContent || updateResult.innerHTML;
-        }
-        
-        if (!dataContent) {
-          console.error('Could not find data content in SOAP response');
-          return [];
-        }
-        
-        let innerXmlDoc;
-        try {
-          innerXmlDoc = parser.parseFromString(dataContent, "text/xml");
-        } catch (e) {
-          const unescapedContent = dataContent
-            .replace(/&lt;/g, '<')
-            .replace(/&gt;/g, '>')
-            .replace(/&amp;/g, '&')
-            .replace(/&quot;/g, '"')
-            .replace(/&#39;/g, "'");
-          
-          innerXmlDoc = parser.parseFromString(unescapedContent, "text/xml");
-        }
-        
-        const tables = Array.from(innerXmlDoc.getElementsByTagName("Table"));
-        
-        if (tables.length === 0) {
-          const alternativeContainers = ['NewDataSet', 'DataSet', 'diffgr:diffgram', 'diffgram'];
-          for (const containerName of alternativeContainers) {
-            const container = innerXmlDoc.querySelector(containerName);
-            if (container) {
-              const tablesInContainer = Array.from(container.getElementsByTagName("Table"));
-              if (tablesInContainer.length > 0) {
-                tables.push(...tablesInContainer);
-                break;
-              }
-            }
-          }
-        }
-        
-        return tables.map(table => {
-          const get = tag => {
-            const element = table.getElementsByTagName(tag)[0];
-            return element ? element.textContent.trim() : '';
-          };
-          
-          return {
-            ITEMNO: get("ITEMNO"),
-            IDESC: get("IDESC"),
-            ITUPC: get("ITUPC"),
-            PRC1: get("PRC1"),
-            QTYOH: get("QTYOH")
-          };
-        });
-        
-      } catch (e) {
-        console.error("Error processing XML:", e);
-        return [];
+    if (!headerResult.success) {
+      console.error("Failed to add order header:", headerResult.error)
+      return {
+        statusCode: 500,
+        headers,
+        body: JSON.stringify({
+          message: "Failed to add order header",
+          error: headerResult.error,
+        }),
       }
     }
 
-    // Fetch items from API
-    async function fetchItems() {
-      showStatus('loading', 'Fetching inventory data...');
-      showSkeleton();
-      
-      try {
-        const daysBack = parseInt(dateRangeSelect.value);
-        const lastUpdate = calculateLastUpdateDate(daysBack);
-        
-        const res = await fetch(API_ENDPOINT, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
+    const orderNumber = headerResult.orderNumber
+    console.log("Order header created with number:", orderNumber)
+
+    // Step 2: Add Order Details
+    for (const item of items) {
+      console.log("Adding item to order:", item.ITEMNO)
+      const detailResult = await addOrderDetail(orderNumber, item, credentials)
+      if (!detailResult.success) {
+        console.error("Failed to add order detail:", detailResult.error)
+        return {
+          statusCode: 500,
+          headers,
           body: JSON.stringify({
-            lastUpdate: lastUpdate,
-            lastItem: -1, // Always -1 for all products as requested
-            source: "FPR"
+            message: `Failed to add order detail for item ${item.ITEMNO}`,
+            error: detailResult.error,
           }),
-        });
-        
-        if (!res.ok) {
-          throw new Error(`HTTP error! Status: ${res.status}`);
         }
-        
-        const json = await res.json();
-        
-        if (!json.success) {
-          throw new Error(json.message || 'API returned an error');
-        }
-        
-        allItems = extractDataFromSoapXml(json.xml);
-        
-        if (allItems.length === 0) {
-          showStatus('warning', 'No inventory items found in the data');
-        } else {
-          updateStats();
-          filteredItems = filterAndSortItems();
-          showStatus('success', `Successfully loaded ${allItems.length} inventory items`);
-          renderItems();
-        }
-        
-      } catch (e) {
-        showStatus('error', `Failed to load inventory: ${e.message}`);
-        console.error(e);
-      } finally {
-        hideSkeleton();
       }
     }
 
-    // Event Listeners
-    applyFiltersBtn.addEventListener('click', () => {
-      searchTerm = searchInput.value;
-      currentSort = sortSelect.value;
-      applyFilters();
-    });
-    
-    resetFiltersBtn.addEventListener('click', () => {
-      searchInput.value = '';
-      sortSelect.value = 'category';
-      dateRangeSelect.value = '2';
-      itemsPerPageSelect.value = '10';
-      searchTerm = '';
-      currentSort = 'category';
-      currentCategory = 'all';
-      itemsPerPage = 10;
-      
-      // Reset active category tab
-      document.querySelectorAll('.category-tab').forEach(tab => {
-        tab.classList.remove('active');
-      });
-      document.querySelector('[data-category="all"]').classList.add('active');
-      
-      applyFilters();
-    });
-    
-    refreshBtn.addEventListener('click', () => {
-      allItems = [];
-      currentPage = 1;
-      tableBody.innerHTML = '';
-      fetchItems();
-    });
-    
-    // Search on enter key
-    searchInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        searchTerm = searchInput.value;
-        applyFilters();
-      }
-    });
+    // Step 3: Submit Order (optional - you may want to submit manually)
+    const submitResult = await submitOrder(orderNumber, credentials)
+    if (!submitResult.success) {
+      console.warn("Order created but submission failed:", submitResult.error)
+      // Don't fail the entire order if submission fails
+    }
 
-    // Date range change triggers new fetch
-    dateRangeSelect.addEventListener('change', () => {
-      fetchItems();
-    });
+    console.log("Order completed successfully:", orderNumber)
 
-    // Initialize - set default active tab and fetch items
-    document.querySelector('[data-category="all"]').classList.add('active');
-    fetchItems();
-  </script>
-</body>
-</html>
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({
+        message: "Order placed successfully",
+        orderNumber: orderNumber,
+        submitted: submitResult.success,
+      }),
+    }
+  } catch (error) {
+    console.error("Order processing error:", error)
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({
+        message: "Internal Server Error",
+        error: error.message,
+      }),
+    }
+  }
+}
+
+// Add Order Header
+async function addOrderHeader(orderData, credentials) {
+  const soapBody = `<?xml version="1.0" encoding="utf-8"?>
+  <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                 xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+                 xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+    <soap:Body>
+      <AddHeader xmlns="http://webservices.theshootingwarehouse.com/smart/Orders.asmx">
+        <CustomerNumber>${credentials.customerNumber}</CustomerNumber>
+        <UserName>${credentials.userName}</UserName>
+        <Password>${credentials.password}</Password>
+        <Source>${credentials.source}</Source>
+        <PO>${orderData.poNumber}</PO>
+        <CustomerOrderNumber>${orderData.poNumber}</CustomerOrderNumber>
+        <SalesMessage>Online Order - ${orderData.orderNotes || ""}</SalesMessage>
+        <ShipVIA>${orderData.shippingMethod || "GROUND"}</ShipVIA>
+        <ShipToName>${orderData.shipName}</ShipToName>
+        <ShipToAttn></ShipToAttn>
+        <ShipToAddr1>${orderData.shipAddress}</ShipToAddr1>
+        <ShipToAddr2>${orderData.shipAddress2 || ""}</ShipToAddr2>
+        <ShipToCity>${orderData.shipCity}</ShipToCity>
+        <ShipToState>${orderData.shipState}</ShipToState>
+        <ShipToZip>${orderData.shipZip}</ShipToZip>
+        <ShipToPhone>${orderData.shipPhone || ""}</ShipToPhone>
+        <AdultSignature>false</AdultSignature>
+        <Signature>false</Signature>
+        <Insurance>false</Insurance>
+      </AddHeader>
+    </soap:Body>
+  </soap:Envelope>`
+
+  try {
+    const response = await axios.post("http://webservices.theshootingwarehouse.com/smart/orders.asmx", soapBody, {
+      httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+      headers: {
+        "Content-Type": "text/xml; charset=utf-8",
+        SOAPAction: "http://webservices.theshootingwarehouse.com/smart/Orders.asmx/AddHeader",
+      },
+      timeout: 30000, // 30 second timeout
+    })
+
+    console.log("AddHeader response status:", response.status)
+
+    // Parse order number from response
+    const orderNumberMatch = response.data.match(/<AddHeaderResult>(\d+)<\/AddHeaderResult>/)
+    const orderNumber = orderNumberMatch ? Number.parseInt(orderNumberMatch[1]) : 0
+
+    console.log("Extracted order number:", orderNumber)
+
+    return {
+      success: orderNumber && orderNumber > 0,
+      orderNumber: orderNumber,
+    }
+  } catch (error) {
+    console.error("AddHeader error:", error.message)
+    return {
+      success: false,
+      error: error.response?.data || error.message,
+    }
+  }
+}
+
+// Add Order Detail
+async function addOrderDetail(orderNumber, item, credentials) {
+  const soapBody = `<?xml version="1.0" encoding="utf-8"?>
+  <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                 xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+                 xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+    <soap:Body>
+      <AddDetail xmlns="http://webservices.theshootingwarehouse.com/smart/Orders.asmx">
+        <OrderNumber>${orderNumber}</OrderNumber>
+        <CustomerNumber>${credentials.customerNumber}</CustomerNumber>
+        <UserName>${credentials.userName}</UserName>
+        <Password>${credentials.password}</Password>
+        <Source>${credentials.source}</Source>
+        <SSItemNumber>${item.ITEMNO}</SSItemNumber>
+        <Quantity>${item.quantity}</Quantity>
+        <OrderPrice>${Number.parseFloat(item.PRC1 || 0)}</OrderPrice>
+        <CustomerItemNumber>${item.ITEMNO}</CustomerItemNumber>
+        <CustomerItemDescription>${item.IDESC}</CustomerItemDescription>
+      </AddDetail>
+    </soap:Body>
+  </soap:Envelope>`
+
+  try {
+    const response = await axios.post("http://webservices.theshootingwarehouse.com/smart/orders.asmx", soapBody, {
+      httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+      headers: {
+        "Content-Type": "text/xml; charset=utf-8",
+        SOAPAction: "http://webservices.theshootingwarehouse.com/smart/Orders.asmx/AddDetail",
+      },
+      timeout: 30000,
+    })
+
+    // Parse boolean result from response
+    const resultMatch = response.data.match(/<AddDetailResult>(true|false|1|0)<\/AddDetailResult>/i)
+    const success = resultMatch ? resultMatch[1].toLowerCase() === "true" || resultMatch[1] === "1" : false
+
+    return { success }
+  } catch (error) {
+    console.error("AddDetail error:", error.message)
+    return {
+      success: false,
+      error: error.response?.data || error.message,
+    }
+  }
+}
+
+// Submit Order (optional)
+async function submitOrder(orderNumber, credentials) {
+  const soapBody = `<?xml version="1.0" encoding="utf-8"?>
+  <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                 xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+                 xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+    <soap:Body>
+      <Submit xmlns="http://webservices.theshootingwarehouse.com/smart/Orders.asmx">
+        <OrderNumber>${orderNumber}</OrderNumber>
+        <CustomerNumber>${credentials.customerNumber}</CustomerNumber>
+        <UserName>${credentials.userName}</UserName>
+        <Password>${credentials.password}</Password>
+        <Source>${credentials.source}</Source>
+      </Submit>
+    </soap:Body>
+  </soap:Envelope>`
+
+  try {
+    const response = await axios.post("http://webservices.theshootingwarehouse.com/smart/orders.asmx", soapBody, {
+      httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+      headers: {
+        "Content-Type": "text/xml; charset=utf-8",
+        SOAPAction: "http://webservices.theshootingwarehouse.com/smart/Orders.asmx/Submit",
+      },
+      timeout: 30000,
+    })
+
+    // Parse boolean result from response
+    const resultMatch = response.data.match(/<SubmitResult>(true|false|1|0)<\/SubmitResult>/i)
+    const success = resultMatch ? resultMatch[1].toLowerCase() === "true" || resultMatch[1] === "1" : false
+
+    return { success }
+  } catch (error) {
+    console.error("Submit error:", error.message)
+    return {
+      success: false,
+      error: error.response?.data || error.message,
+    }
+  }
+}
