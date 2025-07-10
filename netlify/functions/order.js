@@ -197,8 +197,8 @@ async function handlePlaceOrder(orderData, items, credentials, headers) {
 
     console.log("Order completed and submitted successfully:", orderNumber)
 
-    // Optional: Get order details for confirmation
-    const orderDetails = await getOrderDetail(orderNumber, credentials)
+    // Get order details for confirmation popup
+    const orderDetails = await getOrderDetail(orderNumber, orderData.poNumber, credentials)
 
     return {
       statusCode: 200,
@@ -206,6 +206,7 @@ async function handlePlaceOrder(orderData, items, credentials, headers) {
       body: JSON.stringify({
         message: "Order placed and submitted successfully",
         orderNumber: orderNumber,
+        poNumber: orderData.poNumber,
         submitted: true,
         orderDetails: orderDetails.success ? orderDetails.data : null,
       }),
@@ -381,18 +382,19 @@ async function submitOrder(orderNumber, credentials) {
   }
 }
 
-// Optional: GetDetail - View order summary after submission
-async function getOrderDetail(orderNumber, credentials) {
+// Get order details for confirmation popup
+async function getOrderDetail(orderNumber, customerOrderNumber, credentials) {
   const soapBody = `<?xml version="1.0" encoding="utf-8"?>
   <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                  xmlns:xsd="http://www.w3.org/2001/XMLSchema"
                  xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
     <soap:Body>
       <GetDetail xmlns="http://webservices.theshootingwarehouse.com/smart/Orders.asmx">
-        <OrderNumber>${orderNumber}</OrderNumber>
         <CustomerNumber>${credentials.customerNumber}</CustomerNumber>
         <UserName>${credentials.userName}</UserName>
         <Password>${credentials.password}</Password>
+        <OrderNumber>${orderNumber}</OrderNumber>
+        <CustomerOrderNumber>${customerOrderNumber}</CustomerOrderNumber>
         <Source>${credentials.source}</Source>
       </GetDetail>
     </soap:Body>
@@ -408,15 +410,61 @@ async function getOrderDetail(orderNumber, credentials) {
       timeout: 30000,
     })
 
+    console.log("GetDetail response:", response.data.substring(0, 500))
+
     // Parse the order details from XML response
     const orderData = parseXMLResponse(response.data, "GetDetailResult")
 
     return {
       success: !!orderData,
       data: orderData,
+      rawResponse: response.data,
     }
   } catch (error) {
     console.error("GetDetail error:", error.message)
+    return {
+      success: false,
+      error: error.response?.data || error.message,
+    }
+  }
+}
+
+// Get order header information for confirmation
+async function getOrderHeader(orderNumber, credentials) {
+  const soapBody = `<?xml version="1.0" encoding="utf-8"?>
+  <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                 xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+                 xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+    <soap:Body>
+      <GetHeader xmlns="http://webservices.theshootingwarehouse.com/smart/Orders.asmx">
+        <OrderNumber>${orderNumber}</OrderNumber>
+        <CustomerNumber>${credentials.customerNumber}</CustomerNumber>
+        <UserName>${credentials.userName}</UserName>
+        <Password>${credentials.password}</Password>
+        <Source>${credentials.source}</Source>
+      </GetHeader>
+    </soap:Body>
+  </soap:Envelope>`
+
+  try {
+    const response = await axios.post(ORDER_ENDPOINT, soapBody, {
+      httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+      headers: {
+        "Content-Type": "text/xml; charset=utf-8",
+        SOAPAction: "http://webservices.theshootingwarehouse.com/smart/Orders.asmx/GetHeader",
+      },
+      timeout: 30000,
+    })
+
+    // Parse the order header from XML response
+    const headerData = parseXMLResponse(response.data, "GetHeaderResult")
+
+    return {
+      success: !!headerData,
+      data: headerData,
+    }
+  } catch (error) {
+    console.error("GetHeader error:", error.message)
     return {
       success: false,
       error: error.response?.data || error.message,
