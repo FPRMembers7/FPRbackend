@@ -401,7 +401,7 @@
                 <option value="TN">Tennessee</option>
                 <option value="TX">Texas</option>
                 <option value="UT">Utah</option>
-                <option value="VT">Vermont</option>
+                <option value="VT">Vermont</Vermont>
                 <option value="VA">Virginia</option>
                 <option value="WA">Washington</option>
                 <option value="WV">West Virginia</option>
@@ -439,6 +439,46 @@
         </form>
       </div>
     </div>
+  </div>
+
+  <!-- Order Tracking Modal -->
+  <div id="tracking-modal" class="fixed inset-0 bg-black bg-opacity-50 modal hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div class="p-6">
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-2xl font-bold text-gray-900">Order Tracking</h2>
+          <button id="close-tracking" class="text-gray-400 hover:text-gray-600 text-2xl">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+        
+        <form id="tracking-form" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">PO Number</label>
+            <input type="text" id="tracking-po" required class="w-full rounded border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500" placeholder="Enter your PO number">
+          </div>
+        
+          <button type="submit" id="track-order-btn" class="w-full bg-primary-600 hover:bg-primary-700 text-white py-2 px-4 rounded-lg transition-colors">
+            <i class="fas fa-search mr-2"></i>
+            Track Order
+          </button>
+        </form>
+        
+        <div id="tracking-results" class="mt-6 hidden">
+          <h3 class="text-lg font-semibold mb-3">Tracking Information</h3>
+          <div id="tracking-content" class="space-y-3">
+            <!-- Tracking results will be inserted here -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Order Tracking Button (Fixed Position) -->
+  <div class="fixed bottom-20 right-4 z-40">
+    <button id="tracking-toggle" class="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-full shadow-lg transition-colors">
+      <i class="fas fa-truck text-lg"></i>
+    </button>
   </div>
 
   <!-- Cart Button (Fixed Position) -->
@@ -1272,7 +1312,6 @@
           shipAddress2: document.getElementById('ship-addr2').value,
           shipCity: document.getElementById('ship-city').value,
           shipState: document.getElementById('ship-state').value,
-          shipZip: document.getElementById('ship-zip').value,
           shipPhone: document.getElementById('ship-phone').value,
           orderNotes: document.getElementById('order-notes').value,
           shippingMethod: 'GROUND' // Default shipping method
@@ -1326,7 +1365,102 @@
       }
     });
 
-    // Close modal with Escape key
+    // Tracking modal event listeners
+    const trackingModal = document.getElementById('tracking-modal');
+    const trackingToggle = document.getElementById('tracking-toggle');
+    const closeTracking = document.getElementById('close-tracking');
+    const trackingForm = document.getElementById('tracking-form');
+
+    trackingToggle.addEventListener('click', () => {
+      trackingModal.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+    });
+
+    closeTracking.addEventListener('click', () => {
+      trackingModal.classList.add('hidden');
+      document.body.style.overflow = 'auto';
+    });
+
+    trackingModal.addEventListener('click', (e) => {
+      if (e.target === trackingModal) {
+        trackingModal.classList.add('hidden');
+        document.body.style.overflow = 'auto';
+      }
+    });
+
+    // Handle tracking form submission
+    trackingForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const trackOrderBtn = document.getElementById('track-order-btn');
+      const trackingResults = document.getElementById('tracking-results');
+      const trackingContent = document.getElementById('tracking-content');
+      const poNumber = document.getElementById('tracking-po').value;
+      
+      if (!poNumber) {
+        alert('Please enter a PO number');
+        return;
+      }
+      
+      trackOrderBtn.disabled = true;
+      trackOrderBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Tracking Order...';
+      
+      try {
+        const credentials = {
+          customerNumber: 'YOUR_SPORTS_SOUTH_ACCOUNT_NUMBER',
+          userName: 'YOUR_USERNAME',
+          password: 'YOUR_PASSWORD',
+          source: 'FPR'
+        };
+        
+        const response = await fetch('/.netlify/functions/order', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'get-tracking',
+            poNumber: poNumber,
+            credentials: credentials
+          })
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok && result.success) {
+          trackingContent.innerHTML = `
+            <div class="bg-green-50 border border-green-200 rounded-lg p-4">
+              <h4 class="font-semibold text-green-800">Tracking Found</h4>
+              <pre class="mt-2 text-sm text-green-700 whitespace-pre-wrap">${result.data}</pre>
+            </div>
+          `;
+          trackingResults.classList.remove('hidden');
+        } else {
+          trackingContent.innerHTML = `
+            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <h4 class="font-semibold text-yellow-800">No Tracking Information</h4>
+              <p class="mt-2 text-sm text-yellow-700">No tracking information found for PO: ${poNumber}</p>
+            </div>
+          `;
+          trackingResults.classList.remove('hidden');
+        }
+        
+      } catch (error) {
+        console.error('Tracking error:', error);
+        trackingContent.innerHTML = `
+          <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+            <h4 class="font-semibold text-red-800">Error</h4>
+            <p class="mt-2 text-sm text-red-700">Failed to retrieve tracking information: ${error.message}</p>
+          </div>
+        `;
+        trackingResults.classList.remove('hidden');
+      } finally {
+        trackOrderBtn.disabled = false;
+        trackOrderBtn.innerHTML = '<i class="fas fa-search mr-2"></i>Track Order';
+      }
+    });
+
+    // Update the existing escape key handler around line 1050:
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         if (!itemModal.classList.contains('hidden')) {
@@ -1340,6 +1474,10 @@
           checkoutModal.classList.add('hidden');
           document.body.style.overflow = 'auto';
         }
+        if (!trackingModal.classList.contains('hidden')) {
+          trackingModal.classList.add('hidden');
+          document.body.style.overflow = 'auto';
+        }
       }
     });
 
@@ -1351,6 +1489,17 @@
     updateCartCount();
     renderCart();
     fetchItems();
+
+    // API credentials - UPDATE THESE WITH YOUR ACTUAL CREDENTIALS
+    const credentials = {
+      customerNumber: '99994', // Your Sports South account number
+      userName: '99994', // Your Sports South username
+      password: '12345', // Your Sports South password
+      source: 'FPR' // Your source tag
+    };
+
+    // Order endpoint: http://webservices.theshootingwarehouse.com/smart/orders.asmx
+    // Tracking endpoint: http://webservices.theshootingwarehouse.com/smart/invoices.asmx
   </script>
 </body>
 </html>
