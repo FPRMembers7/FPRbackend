@@ -99,7 +99,26 @@ async function handlePlaceOrder(orderData, items, credentials, headers) {
     }
   }
 
-  console.log("Processing order with data:", { orderData, itemCount: items.length })
+  // Validate required fields
+  const requiredFields = ["poNumber", "shipName", "shipAddress", "shipCity", "shipState", "shipZip"]
+  const missingFields = requiredFields.filter((field) => !orderData[field])
+
+  if (missingFields.length > 0) {
+    return {
+      statusCode: 400,
+      headers,
+      body: JSON.stringify({
+        message: `Missing required fields: ${missingFields.join(", ")}`,
+        orderData: orderData,
+      }),
+    }
+  }
+
+  console.log("Processing order with data:", {
+    orderData: orderData,
+    itemCount: items.length,
+    credentials: { ...credentials, password: "***" }, // Don't log password
+  })
 
   try {
     // Step 1: AddHeader - Creates the order shell
@@ -114,10 +133,13 @@ async function handlePlaceOrder(orderData, items, credentials, headers) {
         body: JSON.stringify({
           message: "Failed to create order header",
           error: headerResult.error,
+          statusCode: headerResult.statusCode,
+          orderData: orderData,
         }),
       }
     }
 
+    // Continue with rest of the function...
     const orderNumber = headerResult.orderNumber
     console.log("Order header created successfully with number:", orderNumber)
 
@@ -196,6 +218,7 @@ async function handlePlaceOrder(orderData, items, credentials, headers) {
       body: JSON.stringify({
         message: "Failed to process order",
         error: error.message,
+        orderData: orderData,
       }),
     }
   }
@@ -215,7 +238,7 @@ async function addOrderHeader(orderData, credentials) {
         <Source>${credentials.source}</Source>
         <PO>${orderData.poNumber}</PO>
         <CustomerOrderNumber>${orderData.poNumber}</CustomerOrderNumber>
-        <SalesMessage>Online Order${orderData.orderNotes ? " - " + orderData.orderNotes : ""}</SalesMessage>
+        <SalesMessage>Online Order${orderData.orderNotes ? " - " + orderData.orderNotes.substring(0, 50) : ""}</SalesMessage>
         <ShipVIA>${orderData.shippingMethod || "GROUND"}</ShipVIA>
         <ShipToName>${orderData.shipName}</ShipToName>
         <ShipToAttn></ShipToAttn>
@@ -233,6 +256,14 @@ async function addOrderHeader(orderData, credentials) {
   </soap:Envelope>`
 
   try {
+    console.log("Sending AddHeader request with data:", {
+      customerNumber: credentials.customerNumber,
+      poNumber: orderData.poNumber,
+      shipName: orderData.shipName,
+      shipCity: orderData.shipCity,
+      shipState: orderData.shipState,
+    })
+
     const response = await axios.post(ORDER_ENDPOINT, soapBody, {
       httpsAgent: new https.Agent({ rejectUnauthorized: false }),
       headers: {
@@ -243,6 +274,7 @@ async function addOrderHeader(orderData, credentials) {
     })
 
     console.log("AddHeader response status:", response.status)
+    console.log("AddHeader response data:", response.data.substring(0, 500))
 
     const orderNumber = extractOrderNumber(response.data)
     console.log("Extracted order number:", orderNumber)
@@ -250,12 +282,20 @@ async function addOrderHeader(orderData, credentials) {
     return {
       success: orderNumber && orderNumber > 0,
       orderNumber: orderNumber,
+      rawResponse: response.data,
     }
   } catch (error) {
-    console.error("AddHeader error:", error.message)
+    console.error("AddHeader error details:", {
+      message: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data?.substring(0, 500),
+    })
+
     return {
       success: false,
       error: error.response?.data || error.message,
+      statusCode: error.response?.status,
     }
   }
 }
