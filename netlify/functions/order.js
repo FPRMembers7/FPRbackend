@@ -1,6 +1,10 @@
 const axios = require("axios")
 const https = require("https")
 
+// SOAP endpoints as specified
+const ORDER_ENDPOINT = "http://webservices.theshootingwarehouse.com/smart/orders.asmx"
+const INVOICE_ENDPOINT = "http://webservices.theshootingwarehouse.com/smart/invoices.asmx"
+
 // Simple XML parser function to avoid external dependencies
 function parseXMLResponse(xmlString, resultTag) {
   try {
@@ -19,11 +23,8 @@ function extractOrderNumber(xmlString) {
   return result ? Number.parseInt(result) || 0 : 0
 }
 
-function extractBooleanResult(xmlString) {
-  const addDetailResult = parseXMLResponse(xmlString, "AddDetailResult")
-  const submitResult = parseXMLResponse(xmlString, "SubmitResult")
-
-  const result = addDetailResult || submitResult
+function extractBooleanResult(xmlString, resultTag = "AddDetailResult") {
+  const result = parseXMLResponse(xmlString, resultTag)
   return result ? result.toLowerCase() === "true" || result === "1" : false
 }
 
@@ -54,70 +55,26 @@ exports.handler = async (event, context) => {
 
   try {
     const data = JSON.parse(event.body)
-    const { orderData, items, credentials } = data
+    const { orderData, items, credentials, action = "place-order" } = data
 
-    if (!orderData || !items || !credentials) {
-      return {
-        statusCode: 400,
-        headers,
-        body: JSON.stringify({ message: "Missing orderData, items, or credentials" }),
-      }
-    }
-
-    console.log("Processing order with data:", { orderData, itemCount: items.length })
-
-    // Step 1: Add Order Header
-    const headerResult = await addOrderHeader(orderData, credentials)
-
-    if (!headerResult.success) {
-      console.error("Failed to add order header:", headerResult.error)
-      return {
-        statusCode: 500,
-        headers,
-        body: JSON.stringify({
-          message: "Failed to add order header",
-          error: headerResult.error,
-        }),
-      }
-    }
-
-    const orderNumber = headerResult.orderNumber
-    console.log("Order header created with number:", orderNumber)
-
-    // Step 2: Add Order Details
-    for (const item of items) {
-      console.log("Adding item to order:", item.ITEMNO)
-      const detailResult = await addOrderDetail(orderNumber, item, credentials)
-      if (!detailResult.success) {
-        console.error("Failed to add order detail:", detailResult.error)
+    // Handle different actions
+    switch (action) {
+      case "place-order":
+        return await handlePlaceOrder(orderData, items, credentials, headers)
+      case "get-order-detail":
+        return await handleGetOrderDetail(data.orderNumber, credentials, headers)
+      case "get-tracking":
+        return await handleGetTracking(data.poNumber, credentials, headers)
+      case "get-credits":
+        return await handleGetCredits(data.startDate, data.endDate, credentials, headers)
+      case "get-package-contents":
+        return await handleGetPackageContents(data.orderNumber, credentials, headers)
+      default:
         return {
-          statusCode: 500,
+          statusCode: 400,
           headers,
-          body: JSON.stringify({
-            message: `Failed to add order detail for item ${item.ITEMNO}`,
-            error: detailResult.error,
-          }),
+          body: JSON.stringify({ message: "Invalid action specified" }),
         }
-      }
-    }
-
-    // Step 3: Submit Order (optional - you may want to submit manually)
-    const submitResult = await submitOrder(orderNumber, credentials)
-    if (!submitResult.success) {
-      console.warn("Order created but submission failed:", submitResult.error)
-      // Don't fail the entire order if submission fails
-    }
-
-    console.log("Order completed successfully:", orderNumber)
-
-    return {
-      statusCode: 200,
-      headers,
-      body: JSON.stringify({
-        message: "Order placed successfully",
-        orderNumber: orderNumber,
-        submitted: submitResult.success,
-      }),
     }
   } catch (error) {
     console.error("Order processing error:", error)
@@ -132,7 +89,119 @@ exports.handler = async (event, context) => {
   }
 }
 
-// Add Order Header
+// Main order placement handler
+async function handlePlaceOrder(orderData, items, credentials, headers) {
+  if (!orderData || !items || !credentials) {
+    return {
+      statusCode: 400,
+      headers,
+      body: JSON.stringify({ message: "Missing orderData, items, or credentials" }),
+    }
+  }
+
+  console.log("Processing order with data:", { orderData, itemCount: items.length })
+
+  try {
+    // Step 1: AddHeader - Creates the order shell
+    console.log("Step 1: Creating order header...")
+    const headerResult = await addOrderHeader(orderData, credentials)
+
+    if (!headerResult.success) {
+      console.error("Failed to add order header:", headerResult.error)
+      return {
+        statusCode: 500,
+        headers,
+        body: JSON.stringify({
+          message: "Failed to create order header",
+          error: headerResult.error,
+        }),
+      }
+    }
+
+    const orderNumber = headerResult.orderNumber
+    console.log("Order header created successfully with number:", orderNumber)
+
+    // Step 2: AddDetail - Add each product from cart
+    console.log("Step 2: Adding order details...")
+    const failedItems = []
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i]
+      console.log(`Adding item ${i + 1}/${items.length}: ${item.ITEMNO}`)
+
+      const detailResult = await addOrderDetail(orderNumber, item, credentials)
+      if (!detailResult.success) {
+        console.error(`Failed to add item ${item.ITEMNO}:`, detailResult.error)
+        failedItems.push({
+          itemNo: item.ITEMNO,
+          description: item.IDESC,
+          error: detailResult.error,
+        })
+      }
+    }
+
+    // If any items failed, return partial success
+    if (failedItems.length > 0) {
+      console.warn(`Order ${orderNumber} created but ${failedItems.length} items failed`)
+      return {
+        statusCode: 207, // Multi-status
+        headers,
+        body: JSON.stringify({
+          message: "Order created with some items failed",
+          orderNumber: orderNumber,
+          failedItems: failedItems,
+          submitted: false,
+        }),
+      }
+    }
+
+    // Step 3: Submit - Finalize and submit to Sports South
+    console.log("Step 3: Submitting order to Sports South...")
+    const submitResult = await submitOrder(orderNumber, credentials)
+
+    if (!submitResult.success) {
+      console.warn("Order created but submission failed:", submitResult.error)
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          message: "Order created but not submitted - please submit manually",
+          orderNumber: orderNumber,
+          submitted: false,
+          submitError: submitResult.error,
+        }),
+      }
+    }
+
+    console.log("Order completed and submitted successfully:", orderNumber)
+
+    // Optional: Get order details for confirmation
+    const orderDetails = await getOrderDetail(orderNumber, credentials)
+
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({
+        message: "Order placed and submitted successfully",
+        orderNumber: orderNumber,
+        submitted: true,
+        orderDetails: orderDetails.success ? orderDetails.data : null,
+      }),
+    }
+  } catch (error) {
+    console.error("Order placement error:", error)
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({
+        message: "Failed to process order",
+        error: error.message,
+      }),
+    }
+  }
+}
+
+// Step 1: AddHeader - Creates the order shell
 async function addOrderHeader(orderData, credentials) {
   const soapBody = `<?xml version="1.0" encoding="utf-8"?>
   <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -146,7 +215,7 @@ async function addOrderHeader(orderData, credentials) {
         <Source>${credentials.source}</Source>
         <PO>${orderData.poNumber}</PO>
         <CustomerOrderNumber>${orderData.poNumber}</CustomerOrderNumber>
-        <SalesMessage>Online Order - ${orderData.orderNotes || ""}</SalesMessage>
+        <SalesMessage>Online Order${orderData.orderNotes ? " - " + orderData.orderNotes : ""}</SalesMessage>
         <ShipVIA>${orderData.shippingMethod || "GROUND"}</ShipVIA>
         <ShipToName>${orderData.shipName}</ShipToName>
         <ShipToAttn></ShipToAttn>
@@ -164,21 +233,18 @@ async function addOrderHeader(orderData, credentials) {
   </soap:Envelope>`
 
   try {
-    const response = await axios.post("http://webservices.theshootingwarehouse.com/smart/orders.asmx", soapBody, {
+    const response = await axios.post(ORDER_ENDPOINT, soapBody, {
       httpsAgent: new https.Agent({ rejectUnauthorized: false }),
       headers: {
         "Content-Type": "text/xml; charset=utf-8",
         SOAPAction: "http://webservices.theshootingwarehouse.com/smart/Orders.asmx/AddHeader",
       },
-      timeout: 30000, // 30 second timeout
+      timeout: 30000,
     })
 
     console.log("AddHeader response status:", response.status)
 
-    // Parse order number from response
-    const orderNumberMatch = response.data.match(/<AddHeaderResult>(\d+)<\/AddHeaderResult>/)
-    const orderNumber = orderNumberMatch ? Number.parseInt(orderNumberMatch[1]) : 0
-
+    const orderNumber = extractOrderNumber(response.data)
     console.log("Extracted order number:", orderNumber)
 
     return {
@@ -194,7 +260,7 @@ async function addOrderHeader(orderData, credentials) {
   }
 }
 
-// Add Order Detail
+// Step 2: AddDetail - Adds selected products based on ITEMNO from DailyItemUpdate
 async function addOrderDetail(orderNumber, item, credentials) {
   const soapBody = `<?xml version="1.0" encoding="utf-8"?>
   <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -217,7 +283,7 @@ async function addOrderDetail(orderNumber, item, credentials) {
   </soap:Envelope>`
 
   try {
-    const response = await axios.post("http://webservices.theshootingwarehouse.com/smart/orders.asmx", soapBody, {
+    const response = await axios.post(ORDER_ENDPOINT, soapBody, {
       httpsAgent: new https.Agent({ rejectUnauthorized: false }),
       headers: {
         "Content-Type": "text/xml; charset=utf-8",
@@ -226,10 +292,7 @@ async function addOrderDetail(orderNumber, item, credentials) {
       timeout: 30000,
     })
 
-    // Parse boolean result from response
-    const resultMatch = response.data.match(/<AddDetailResult>(true|false|1|0)<\/AddDetailResult>/i)
-    const success = resultMatch ? resultMatch[1].toLowerCase() === "true" || resultMatch[1] === "1" : false
-
+    const success = extractBooleanResult(response.data, "AddDetailResult")
     return { success }
   } catch (error) {
     console.error("AddDetail error:", error.message)
@@ -240,7 +303,7 @@ async function addOrderDetail(orderNumber, item, credentials) {
   }
 }
 
-// Submit Order (optional)
+// Step 3: Submit - Finalizes and submits the order to Sports South
 async function submitOrder(orderNumber, credentials) {
   const soapBody = `<?xml version="1.0" encoding="utf-8"?>
   <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -258,7 +321,7 @@ async function submitOrder(orderNumber, credentials) {
   </soap:Envelope>`
 
   try {
-    const response = await axios.post("http://webservices.theshootingwarehouse.com/smart/orders.asmx", soapBody, {
+    const response = await axios.post(ORDER_ENDPOINT, soapBody, {
       httpsAgent: new https.Agent({ rejectUnauthorized: false }),
       headers: {
         "Content-Type": "text/xml; charset=utf-8",
@@ -267,10 +330,7 @@ async function submitOrder(orderNumber, credentials) {
       timeout: 30000,
     })
 
-    // Parse boolean result from response
-    const resultMatch = response.data.match(/<SubmitResult>(true|false|1|0)<\/SubmitResult>/i)
-    const success = resultMatch ? resultMatch[1].toLowerCase() === "true" || resultMatch[1] === "1" : false
-
+    const success = extractBooleanResult(response.data, "SubmitResult")
     return { success }
   } catch (error) {
     console.error("Submit error:", error.message)
@@ -278,5 +338,248 @@ async function submitOrder(orderNumber, credentials) {
       success: false,
       error: error.response?.data || error.message,
     }
+  }
+}
+
+// Optional: GetDetail - View order summary after submission
+async function getOrderDetail(orderNumber, credentials) {
+  const soapBody = `<?xml version="1.0" encoding="utf-8"?>
+  <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                 xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+                 xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+    <soap:Body>
+      <GetDetail xmlns="http://webservices.theshootingwarehouse.com/smart/Orders.asmx">
+        <OrderNumber>${orderNumber}</OrderNumber>
+        <CustomerNumber>${credentials.customerNumber}</CustomerNumber>
+        <UserName>${credentials.userName}</UserName>
+        <Password>${credentials.password}</Password>
+        <Source>${credentials.source}</Source>
+      </GetDetail>
+    </soap:Body>
+  </soap:Envelope>`
+
+  try {
+    const response = await axios.post(ORDER_ENDPOINT, soapBody, {
+      httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+      headers: {
+        "Content-Type": "text/xml; charset=utf-8",
+        SOAPAction: "http://webservices.theshootingwarehouse.com/smart/Orders.asmx/GetDetail",
+      },
+      timeout: 30000,
+    })
+
+    // Parse the order details from XML response
+    const orderData = parseXMLResponse(response.data, "GetDetailResult")
+
+    return {
+      success: !!orderData,
+      data: orderData,
+    }
+  } catch (error) {
+    console.error("GetDetail error:", error.message)
+    return {
+      success: false,
+      error: error.response?.data || error.message,
+    }
+  }
+}
+
+// Optional: GetTrackingByPO - Retrieve tracking numbers (recommended for customer emails)
+async function getTrackingByPO(poNumber, credentials) {
+  const soapBody = `<?xml version="1.0" encoding="utf-8"?>
+  <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                 xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+                 xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+    <soap:Body>
+      <GetTrackingByPO xmlns="http://webservices.theshootingwarehouse.com/smart/Invoices.asmx">
+        <CustomerNumber>${credentials.customerNumber}</CustomerNumber>
+        <UserName>${credentials.userName}</UserName>
+        <Password>${credentials.password}</Password>
+        <Source>${credentials.source}</Source>
+        <PO>${poNumber}</PO>
+      </GetTrackingByPO>
+    </soap:Body>
+  </soap:Envelope>`
+
+  try {
+    const response = await axios.post(INVOICE_ENDPOINT, soapBody, {
+      httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+      headers: {
+        "Content-Type": "text/xml; charset=utf-8",
+        SOAPAction: "http://webservices.theshootingwarehouse.com/smart/Invoices.asmx/GetTrackingByPO",
+      },
+      timeout: 30000,
+    })
+
+    const trackingData = parseXMLResponse(response.data, "GetTrackingByPOResult")
+
+    return {
+      success: !!trackingData,
+      data: trackingData,
+    }
+  } catch (error) {
+    console.error("GetTrackingByPO error:", error.message)
+    return {
+      success: false,
+      error: error.response?.data || error.message,
+    }
+  }
+}
+
+// Optional: GetCreditsByDate - Check for any credits/refunds
+async function getCreditsByDate(startDate, endDate, credentials) {
+  const soapBody = `<?xml version="1.0" encoding="utf-8"?>
+  <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                 xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+                 xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+    <soap:Body>
+      <GetCreditsByDate xmlns="http://webservices.theshootingwarehouse.com/smart/Invoices.asmx">
+        <CustomerNumber>${credentials.customerNumber}</CustomerNumber>
+        <UserName>${credentials.userName}</UserName>
+        <Password>${credentials.password}</Password>
+        <Source>${credentials.source}</Source>
+        <StartDate>${startDate}</StartDate>
+        <EndDate>${endDate}</EndDate>
+      </GetCreditsByDate>
+    </soap:Body>
+  </soap:Envelope>`
+
+  try {
+    const response = await axios.post(INVOICE_ENDPOINT, soapBody, {
+      httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+      headers: {
+        "Content-Type": "text/xml; charset=utf-8",
+        SOAPAction: "http://webservices.theshootingwarehouse.com/smart/Invoices.asmx/GetCreditsByDate",
+      },
+      timeout: 30000,
+    })
+
+    const creditsData = parseXMLResponse(response.data, "GetCreditsByDateResult")
+
+    return {
+      success: !!creditsData,
+      data: creditsData,
+    }
+  } catch (error) {
+    console.error("GetCreditsByDate error:", error.message)
+    return {
+      success: false,
+      error: error.response?.data || error.message,
+    }
+  }
+}
+
+// Optional: GetPackageContents - If orders return multiple packages
+async function getPackageContents(orderNumber, credentials) {
+  const soapBody = `<?xml version="1.0" encoding="utf-8"?>
+  <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                 xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+                 xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+    <soap:Body>
+      <GetPackageContents xmlns="http://webservices.theshootingwarehouse.com/smart/Invoices.asmx">
+        <CustomerNumber>${credentials.customerNumber}</CustomerNumber>
+        <UserName>${credentials.userName}</UserName>
+        <Password>${credentials.password}</Password>
+        <Source>${credentials.source}</Source>
+        <OrderNumber>${orderNumber}</OrderNumber>
+      </GetPackageContents>
+    </soap:Body>
+  </soap:Envelope>`
+
+  try {
+    const response = await axios.post(INVOICE_ENDPOINT, soapBody, {
+      httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+      headers: {
+        "Content-Type": "text/xml; charset=utf-8",
+        SOAPAction: "http://webservices.theshootingwarehouse.com/smart/Invoices.asmx/GetPackageContents",
+      },
+      timeout: 30000,
+    })
+
+    const packageData = parseXMLResponse(response.data, "GetPackageContentsResult")
+
+    return {
+      success: !!packageData,
+      data: packageData,
+    }
+  } catch (error) {
+    console.error("GetPackageContents error:", error.message)
+    return {
+      success: false,
+      error: error.response?.data || error.message,
+    }
+  }
+}
+
+// Handler functions for different actions
+async function handleGetOrderDetail(orderNumber, credentials, headers) {
+  if (!orderNumber || !credentials) {
+    return {
+      statusCode: 400,
+      headers,
+      body: JSON.stringify({ message: "Missing orderNumber or credentials" }),
+    }
+  }
+
+  const result = await getOrderDetail(orderNumber, credentials)
+
+  return {
+    statusCode: result.success ? 200 : 500,
+    headers,
+    body: JSON.stringify(result),
+  }
+}
+
+async function handleGetTracking(poNumber, credentials, headers) {
+  if (!poNumber || !credentials) {
+    return {
+      statusCode: 400,
+      headers,
+      body: JSON.stringify({ message: "Missing poNumber or credentials" }),
+    }
+  }
+
+  const result = await getTrackingByPO(poNumber, credentials)
+
+  return {
+    statusCode: result.success ? 200 : 500,
+    headers,
+    body: JSON.stringify(result),
+  }
+}
+
+async function handleGetCredits(startDate, endDate, credentials, headers) {
+  if (!startDate || !endDate || !credentials) {
+    return {
+      statusCode: 400,
+      headers,
+      body: JSON.stringify({ message: "Missing date range or credentials" }),
+    }
+  }
+
+  const result = await getCreditsByDate(startDate, endDate, credentials)
+
+  return {
+    statusCode: result.success ? 200 : 500,
+    headers,
+    body: JSON.stringify(result),
+  }
+}
+
+async function handleGetPackageContents(orderNumber, credentials, headers) {
+  if (!orderNumber || !credentials) {
+    return {
+      statusCode: 400,
+      headers,
+      body: JSON.stringify({ message: "Missing orderNumber or credentials" }),
+    }
+  }
+
+  const result = await getPackageContents(orderNumber, credentials)
+
+  return {
+    statusCode: result.success ? 200 : 500,
+    headers,
+    body: JSON.stringify(result),
   }
 }
