@@ -365,23 +365,23 @@
                 <option value="CO">Colorado</option>
                 <option value="CT">Connecticut</option>
                 <option value="DE">Delaware</option>
-                <option value="FL">Florida</option>
-                <option value="GA">Georgia</option>
-                <option value="HI">Hawaii</option>
-                <option value="ID">Idaho</option>
-                <option value="IL">Illinois</option>
-                <option value="IN">Indiana</option>
-                <option value="IA">Iowa</option>
-                <option value="KS">Kansas</option>
-                <option value="KY">Kentucky</option>
-                <option value="LA">Louisiana</option>
-                <option value="ME">Maine</option>
-                <option value="MD">Maryland</option>
-                <option value="MA">Massachusetts</option>
+                <option value="FL">Florida</Florida>
+                <option value="GA">Georgia</Georgia>
+                <option value="HI">Hawaii</Hawaii>
+                <option value="ID">Idaho</Idaho>
+                <option value="IL">Illinois</Illinois>
+                <option value="IN">Indiana</Indiana>
+                <option value="IA">Iowa</Iowa>
+                <option value="KS">Kansas</Kansas>
+                <option value="KY">Kentucky</Kentucky>
+                <option value="LA">Louisiana</Louisiana>
+                <option value="ME">Maine</Maine>
+                <option value="MD">Maryland</Maryland>
+                <option value="MA">Massachusetts</Massachusetts>
                 <option value="MI">Michigan</Michigan>
-                <option value="MN">Minnesota</option>
-                <option value="MS">Mississippi</option>
-                <option value="MO">Missouri</option>
+                <option value="MN">Minnesota</Minnesota>
+                <option value="MS">Mississippi</Mississippi>
+                <option value="MO">Missouri</Missouri>
                 <option value="MT">Montana</Montana>
                 <option value="NE">Nebraska</Nebraska>
                 <option value="NV">Nevada</Nevada>
@@ -390,14 +390,14 @@
                 <option value="NM">New Mexico</New Mexico>
                 <option value="NY">New York</New York>
                 <option value="NC">North Carolina</North Carolina>
-                <option value="ND">North Dakota</North Dakota>
+                <option value="ND">North Dakota</North Dakota</option>
                 <option value="OH">Ohio</Ohio>
                 <option value="OK">Oklahoma</Oklahoma>
                 <option value="OR">Oregon</Oregon>
                 <option value="PA">Pennsylvania</Pennsylvania>
                 <option value="RI">Rhode Island</Rhode Island>
                 <option value="SC">South Carolina</South Carolina>
-                <option value="SD">South Dakota</South Dakota>
+                <option value="SD">South Dakota</South Dakota</option>
                 <option value="TN">Tennessee</Tennessee>
                 <option value="TX">Texas</Texas>
                 <option value="UT">Utah</Utah>
@@ -469,6 +469,35 @@
           <div id="tracking-content" class="space-y-3">
             <!-- Tracking results will be inserted here -->
           </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Order Confirmation Modal -->
+  <div id="confirmation-modal" class="fixed inset-0 bg-black bg-opacity-50 modal hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-lg max-w-lg w-full max-h-[90vh] overflow-y-auto">
+      <div class="p-6">
+        <div class="text-center mb-6">
+          <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 mb-4">
+            <i class="fas fa-check text-green-600 text-2xl"></i>
+          </div>
+          <h2 class="text-2xl font-bold text-gray-900 mb-2">Order Placed Successfully!</h2>
+          <p class="text-gray-600">Your order has been submitted to Sports South</p>
+        </div>
+        
+        <div id="confirmation-content" class="space-y-4">
+          <!-- Order details will be inserted here -->
+        </div>
+        
+        <div class="flex gap-3 mt-6 pt-4 border-t">
+          <button id="copy-tracking-info" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded transition-colors">
+            <i class="fas fa-copy mr-2"></i>
+            Copy Tracking Info
+          </button>
+          <button id="close-confirmation" class="px-6 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 transition-colors">
+            Close
+          </button>
         </div>
       </div>
     </div>
@@ -1353,13 +1382,12 @@
         console.log('Order response:', result);
         
         if (response.ok) {
-          // Order successful
-          alert(`Order placed successfully! Order Number: ${result.orderNumber}`);
+          // Show confirmation modal instead of alert
+          showOrderConfirmation(result);
           
-          // Clear cart and close modal
+          // Clear cart and close checkout modal
           clearCart();
           checkoutModal.classList.add('hidden');
-          document.body.style.overflow = 'auto';
           
           // Reset form
           checkoutForm.reset();
@@ -1472,6 +1500,335 @@
       }
     });
 
+    // Show order confirmation modal
+    function showOrderConfirmation(orderResult) {
+      const confirmationModal = document.getElementById('confirmation-modal');
+      const confirmationContent = document.getElementById('confirmation-content');
+      
+      const orderNumber = orderResult.orderNumber;
+      const poNumber = orderResult.poNumber || `WEB-${Date.now()}`;
+      
+      // Parse order details if available
+      let orderItemsHtml = '';
+      if (orderResult.orderDetails) {
+        try {
+          // Parse the XML order details
+          const parser = new DOMParser();
+          const xmlDoc = parser.parseFromString(orderResult.orderDetails, "text/xml");
+          const tables = Array.from(xmlDoc.getElementsByTagName("Table"));
+          
+          if (tables.length > 0) {
+            orderItemsHtml = `
+          <div class="bg-gray-50 rounded-lg p-4">
+            <h4 class="font-semibold text-gray-800 mb-3">Order Items</h4>
+            <div class="space-y-2 max-h-32 overflow-y-auto">
+              ${tables.map(table => {
+                const getField = (fieldName) => {
+                  const element = table.getElementsByTagName(fieldName)[0];
+                  return element ? element.textContent.trim() : '';
+                };
+                
+                const itemNo = getField('SSItemNumber') || getField('ItemNumber');
+                const description = getField('CustomerItemDescription') || getField('Description');
+                const quantity = getField('Quantity');
+                const price = getField('OrderPrice') || getField('Price');
+                
+                return `
+                  <div class="flex justify-between items-center text-sm">
+                    <div class="flex-1">
+                      <div class="font-medium">${description}</div>
+                      <div class="text-gray-500">Item: ${itemNo}</div>
+                    </div>
+                    <div class="text-right">
+                      <div>Qty: ${quantity}</div>
+                      <div class="font-semibold">$${parseFloat(price || 0).toFixed(2)}</div>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          </div>
+        `;
+      }
+    } catch (e) {
+      console.error('Error parsing order details:', e);
+    }
+  }
+  
+  confirmationContent.innerHTML = `
+    <div class="bg-gray-50 rounded-lg p-4 space-y-3">
+      <div class="flex justify-between items-center">
+        <span class="text-sm font-medium text-gray-500">Order Number:</span>
+        <span class="text-lg font-bold text-primary-600" id="order-number-display">${orderNumber}</span>
+      </div>
+      <div class="flex justify-between items-center">
+        <span class="text-sm font-medium text-gray-500">PO Number:</span>
+        <span class="text-lg font-bold text-gray-900" id="po-number-display">${poNumber}</span>
+      </div>
+      <div class="flex justify-between items-center">
+        <span class="text-sm font-medium text-gray-500">Status:</span>
+        <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+          Submitted to Sports South
+        </span>
+      </div>
+    </div>
+    
+    ${orderItemsHtml}
+    
+    <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
+      <div class="flex items-start">
+        <i class="fas fa-info-circle text-blue-500 mt-1 mr-3"></i>
+        <div>
+          <h4 class="font-semibold text-blue-800">Next Steps</h4>
+          <p class="text-sm text-blue-700 mt-1">
+            Your order has been submitted to Sports South. You can track your order using the PO number above. 
+            You will receive updates as your order is processed and shipped.
+          </p>
+        </div>
+      </div>
+    </div>
+    
+    <div class="text-center">
+      <button id="track-this-order" class="bg-primary-600 hover:bg-primary-700 text-white py-2 px-4 rounded transition-colors">
+        <i class="fas fa-truck mr-2"></i>
+        Track This Order
+      </button>
+    </div>
+  `;
+  
+  confirmationModal.classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  
+  // Store order info for tracking
+  window.currentOrderInfo = {
+    orderNumber: orderNumber,
+    poNumber: poNumber
+  };
+}
+
+    // Copy tracking information to clipboard
+    function copyTrackingInfo() {
+      const orderNumber = document.getElementById('order-number-display').textContent;
+      const poNumber = document.getElementById('po-number-display').textContent;
+      
+      const trackingInfo = `Order Number: ${orderNumber}\nPO Number: ${poNumber}`;
+      
+      navigator.clipboard.writeText(trackingInfo).then(() => {
+        // Show success feedback
+        const copyBtn = document.getElementById('copy-tracking-info');
+        const originalText = copyBtn.innerHTML;
+        copyBtn.innerHTML = '<i class="fas fa-check mr-2"></i>Copied!';
+        copyBtn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+        copyBtn.classList.add('bg-green-600');
+        
+        setTimeout(() => {
+          copyBtn.innerHTML = originalText;
+          copyBtn.classList.remove('bg-green-600');
+          copyBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+        }, 2000);
+      }).catch(() => {
+        alert('Failed to copy to clipboard');
+      });
+    }
+
+    // Event Listeners
+    
+    // Category tab functionality
+    categoryTabs.addEventListener('click', (e) => {
+      if (e.target.classList.contains('category-tab')) {
+        // Remove active class from all tabs
+        document.querySelectorAll('.category-tab').forEach(tab => {
+          tab.classList.remove('active');
+        });
+        
+        // Add active class to clicked tab
+        e.target.classList.add('active');
+        
+        // Set current category
+        currentCategory = e.target.dataset.category;
+        applyFilters();
+      }
+    });
+
+    // Pagination event listeners
+    prevPageBtn.addEventListener('click', () => {
+      if (currentPage > 1) {
+        currentPage--;
+        renderItems();
+      }
+    });
+
+    nextPageBtn.addEventListener('click', () => {
+      const maxPage = Math.ceil(filteredItems.length / itemsPerPage);
+      if (currentPage < maxPage) {
+        currentPage++;
+        renderItems();
+      }
+    });
+
+    // Items per page change
+    itemsPerPageSelect.addEventListener('change', () => {
+      itemsPerPage = parseInt(itemsPerPageSelect.value);
+      currentPage = 1;
+      renderItems();
+    });
+
+    // Date range change triggers new fetch
+    dateRangeSelect.addEventListener('change', () => {
+      fetchItems();
+    });
+
+    // Apply filters
+    applyFiltersBtn.addEventListener('click', () => {
+      searchTerm = searchInput.value;
+      currentSort = sortSelect.value;
+      applyFilters();
+    });
+    
+    // Reset filters
+    resetFiltersBtn.addEventListener('click', () => {
+      searchInput.value = '';
+      sortSelect.value = 'category';
+      dateRangeSelect.value = '2';
+      itemsPerPageSelect.value = '10';
+      searchTerm = '';
+      currentSort = 'category';
+      currentCategory = 'all';
+      itemsPerPage = 10;
+      
+      // Reset active category tab
+      document.querySelectorAll('.category-tab').forEach(tab => {
+        tab.classList.remove('active');
+      });
+      document.querySelector('[data-category="all"]').classList.add('active');
+      
+      applyFilters();
+    });
+    
+    // Refresh
+    refreshBtn.addEventListener('click', () => {
+      allItems = [];
+      currentPage = 1;
+      tableBody.innerHTML = '';
+      fetchItems();
+    });
+    
+    // Search on enter key
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        searchTerm = searchInput.value;
+        applyFilters();
+      }
+    });
+
+    // Modal event listeners
+    closeModal.addEventListener('click', closeModalFunc);
+    closeModalBtn.addEventListener('click', closeModalFunc);
+    modalAddToCart.addEventListener('click', () => {
+      if (currentModalItem) {
+        addToCart(currentModalItem);
+        closeModalFunc();
+      }
+    });
+
+    itemModal.addEventListener('click', (e) => {
+      if (e.target === itemModal) {
+        closeModalFunc();
+      }
+    });
+
+    // Cart event listeners
+    cartToggle.addEventListener('click', () => {
+      cartSidebar.classList.toggle('translate-x-full');
+      document.body.style.overflow = cartSidebar.classList.contains('translate-x-full') ? 'auto' : 'hidden';
+    });
+
+    closeCart.addEventListener('click', () => {
+      cartSidebar.classList.add('translate-x-full');
+      document.body.style.overflow = 'auto';
+    });
+
+    clearCartBtn.addEventListener('click', () => {
+      if (confirm('Are you sure you want to clear your cart?')) {
+        clearCart();
+      }
+    });
+
+    checkoutBtn.addEventListener('click', () => {
+      if (cart.length === 0) {
+        alert('Your cart is empty');
+        return;
+      }
+      
+      // Show checkout modal
+      const checkoutModal = document.getElementById('checkout-modal');
+      const checkoutTotal = document.getElementById('checkout-total');
+      const total = cart.reduce((sum, item) => sum + (parseFloat(item.PRC1 || 0) * item.quantity), 0);
+      
+      checkoutTotal.textContent = `$${total.toFixed(2)}`;
+      checkoutModal.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+      
+      // Close cart sidebar
+      cartSidebar.classList.add('translate-x-full');
+    });
+
+    // Checkout modal event listeners
+    const checkoutModal = document.getElementById('checkout-modal');
+    const closeCheckout = document.getElementById('close-checkout');
+    const cancelCheckout = document.getElementById('cancel-checkout');
+    const checkoutForm = document.getElementById('checkout-form');
+
+    closeCheckout.addEventListener('click', () => {
+      checkoutModal.classList.add('hidden');
+      document.body.style.overflow = 'auto';
+    });
+
+    cancelCheckout.addEventListener('click', () => {
+      checkoutModal.classList.add('hidden');
+      document.body.style.overflow = 'auto';
+    });
+
+    checkoutModal.addEventListener('click', (e) => {
+      if (e.target === checkoutModal) {
+        checkoutModal.classList.add('hidden');
+        document.body.style.overflow = 'auto';
+      }
+    });
+
+    // Confirmation modal event listeners
+    const confirmationModal = document.getElementById('confirmation-modal');
+    const closeConfirmation = document.getElementById('close-confirmation');
+
+    closeConfirmation.addEventListener('click', () => {
+      confirmationModal.classList.add('hidden');
+      document.body.style.overflow = 'auto';
+    });
+
+    confirmationModal.addEventListener('click', (e) => {
+      if (e.target === confirmationModal) {
+        confirmationModal.classList.add('hidden');
+        document.body.style.overflow = 'auto';
+      }
+    });
+
+    // Copy tracking info button
+    document.addEventListener('click', (e) => {
+      if (e.target.id === 'copy-tracking-info') {
+        copyTrackingInfo();
+      }
+      
+      if (e.target.id === 'track-this-order') {
+        // Close confirmation modal and open tracking modal with PO pre-filled
+        confirmationModal.classList.add('hidden');
+        trackingModal.classList.remove('hidden');
+        
+        if (window.currentOrderInfo) {
+          document.getElementById('tracking-po').value = window.currentOrderInfo.poNumber;
+        }
+      }
+    });
+
     // Update the existing escape key handler around line 1050:
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
@@ -1488,6 +1845,10 @@
         }
         if (!trackingModal.classList.contains('hidden')) {
           trackingModal.classList.add('hidden');
+          document.body.style.overflow = 'auto';
+        }
+        if (!confirmationModal.classList.contains('hidden')) {
+          confirmationModal.classList.add('hidden');
           document.body.style.overflow = 'auto';
         }
       }
