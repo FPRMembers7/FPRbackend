@@ -415,9 +415,9 @@
                 <option value="TN">Tennessee</option>
                 <option value="TX">Texas</option>
                 <option value="UT">Utah</option>
-                <option value="VT">Vermont</option>
+                <option value="VT">Vermont</Vermont>
                 <option value="VA">Virginia</option>
-                <option value="WA">Washington</option>
+                <option value="WA">Washington</Washington>
                 <option value="WV">West Virginia</option>
                 <option value="WI">Wisconsin</option>
                 <option value="WY">Wyoming</option>
@@ -467,7 +467,7 @@
       </div>
       
       <!-- Tracking Search Form -->
-      <div class="bg-gray-50 rounded-lg p-4 mb-6">
+      <form id="tracking-form" class="bg-gray-50 rounded-lg p-4 mb-6">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Search Type</label>
@@ -479,7 +479,7 @@
           </div>
           <div id="single-input-container">
             <label class="block text-sm font-medium text-gray-700 mb-1">PO Number</label>
-            <input type="text" id="tracking-input" class="w-full rounded border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500" placeholder="Enter PO number">
+            <input type="text" id="tracking-input" name="tracking-po" class="w-full rounded border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500" placeholder="Enter PO number">
           </div>
           <div id="date-range-container" class="hidden col-span-2">
             <div class="grid grid-cols-2 gap-4">
@@ -496,32 +496,26 @@
         </div>
         
         <div class="flex gap-3 mt-4">
-          <button id="search-invoices-btn" class="bg-primary-600 hover:bg-primary-700 text-white py-2 px-4 rounded transition-colors">
+          <button type="button" id="search-invoices-btn" class="bg-primary-600 hover:bg-primary-700 text-white py-2 px-4 rounded transition-colors">
             <i class="fas fa-search mr-2"></i>Search Invoices
           </button>
-          <button id="get-tracking-btn" class="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded transition-colors">
+          <button type="button" id="get-tracking-btn" class="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded transition-colors">
             <i class="fas fa-truck mr-2"></i>Get Tracking
           </button>
-          <button id="get-package-contents-btn" class="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded transition-colors">
+          <button type="button" id="get-package-contents-btn" class="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded transition-colors">
             <i class="fas fa-box mr-2"></i>Package Contents
           </button>
+          <button type="submit" id="track-order-btn" class="bg-gray-600 hover:bg-gray-700 text-white py-2 px-4 rounded transition-colors">
+            <i class="fas fa-search mr-2"></i>Track Order
+          </button>
         </div>
-      </div>
+      </form>
       
-      <!-- Results Container -->
+      <!-- Add this inside the tracking modal after the form -->
       <div id="tracking-results" class="hidden">
-        <!-- Invoice Results -->
-        <div id="invoice-results" class="mb-6 hidden">
-          <h3 class="text-lg font-semibold mb-3 flex items-center">
-            <i class="fas fa-file-invoice mr-2 text-primary-600"></i>
-            Invoice Information
-          </h3>
-          <div id="invoice-content" class="space-y-4">
-            <!-- Invoice data will be inserted here -->
-          </div>
+        <div id="tracking-content" class="space-y-4">
+          <!-- Results will be inserted here -->
         </div>
-
-        <!-- Tracking Results -->
         <div id="tracking-info-results" class="mb-6 hidden">
           <h3 class="text-lg font-semibold mb-3 flex items-center">
             <i class="fas fa-shipping-fast mr-2 text-blue-600"></i>
@@ -1691,13 +1685,13 @@
     });
 
     // Handle tracking form submission
-    trackingForm.addEventListener('submit', async (e) => {
+    document.getElementById('tracking-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       
       const trackOrderBtn = document.getElementById('track-order-btn');
       const trackingResults = document.getElementById('tracking-results');
-      const trackingContent = document.getElementById('tracking-content');
-      const poNumber = document.getElementById('tracking-po').value;
+      const trackingContent = document.getElementById('tracking-info-content');
+      const poNumber = document.querySelector('input[name="tracking-po"]').value;
       
       if (!poNumber) {
         alert('Please enter a PO number');
@@ -1736,6 +1730,7 @@
               <pre class="mt-2 text-sm text-green-700 whitespace-pre-wrap">${result.data}</pre>
             </div>
           `;
+          document.getElementById('tracking-info-results').classList.remove('hidden');
           trackingResults.classList.remove('hidden');
         } else {
           trackingContent.innerHTML = `
@@ -1744,6 +1739,7 @@
               <p class="mt-2 text-sm text-yellow-700">No tracking information found for PO: ${poNumber}</p>
             </div>
           `;
+          document.getElementById('tracking-info-results').classList.remove('hidden');
           trackingResults.classList.remove('hidden');
         }
         
@@ -1755,6 +1751,7 @@
             <p class="mt-2 text-sm text-red-700">Failed to retrieve tracking information: ${error.message}</p>
           </div>
         `;
+        document.getElementById('tracking-info-results').classList.remove('hidden');
         trackingResults.classList.remove('hidden');
       } finally {
         trackOrderBtn.disabled = false;
@@ -1787,7 +1784,7 @@
         trackingModal.classList.remove('hidden');
         
         if (window.currentOrderInfo) {
-          document.getElementById('tracking-po').value = window.currentOrderInfo.poNumber;
+          document.querySelector('input[name="tracking-po"]').value = window.currentOrderInfo.poNumber;
         }
       }
     });
