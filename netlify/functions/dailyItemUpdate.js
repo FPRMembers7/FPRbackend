@@ -40,6 +40,8 @@ exports.handler = async (event, context) => {
       </soap:Body>
     </soap:Envelope>`
 
+    console.log("Making SOAP request...")
+
     const response = await axios.post("http://webservices.theshootingwarehouse.com/smart/inventory.asmx", soapBody, {
       httpsAgent: new https.Agent({ rejectUnauthorized: false }),
       headers: {
@@ -48,6 +50,10 @@ exports.handler = async (event, context) => {
       },
       timeout: 30000, // 30 second timeout
     })
+
+    console.log("SOAP request completed, status:", response.status)
+    console.log("Response headers:", response.headers)
+    console.log("Response data length:", response.data.length)
 
     // Extract items from XML response
     const items = extractDataFromSoapXml(response.data)
@@ -98,6 +104,9 @@ exports.handler = async (event, context) => {
 // Extract data from SOAP XML response
 function extractDataFromSoapXml(xmlString) {
   try {
+    console.log("Raw XML response length:", xmlString.length)
+
+    // First, try to parse the outer SOAP envelope
     const parser = new DOMParser()
     const xmlDoc = parser.parseFromString(xmlString, "text/xml")
 
@@ -107,63 +116,111 @@ function extractDataFromSoapXml(xmlString) {
       return []
     }
 
+    // Look for the DailyItemUpdateResult element
     let dataContent = ""
     const updateResult = xmlDoc.querySelector("DailyItemUpdateResult")
     if (updateResult) {
       dataContent = updateResult.textContent || updateResult.innerHTML
-    }
-
-    if (!dataContent) {
-      console.error("Could not find data content in SOAP response")
+      console.log("Found DailyItemUpdateResult, content length:", dataContent.length)
+    } else {
+      console.error("Could not find DailyItemUpdateResult in SOAP response")
+      console.log(
+        "Available elements:",
+        Array.from(xmlDoc.querySelectorAll("*")).map((el) => el.tagName),
+      )
       return []
     }
 
-    let innerXmlDoc
-    try {
-      innerXmlDoc = parser.parseFromString(dataContent, "text/xml")
-    } catch (e) {
-      const unescapedContent = dataContent
-        .replace(/&lt;/g, "<")
-        .replace(/&gt;/g, ">")
-        .replace(/&amp;/g, "&")
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'")
-
-      innerXmlDoc = parser.parseFromString(unescapedContent, "text/xml")
+    if (!dataContent) {
+      console.error("DailyItemUpdateResult is empty")
+      return []
     }
 
+    // The content might be HTML-encoded, so decode it
+    let innerXmlDoc
+    try {
+      // First try parsing as-is
+      innerXmlDoc = parser.parseFromString(dataContent, "text/xml")
+
+      // Check if parsing failed, then try unescaping
+      const innerParserError = innerXmlDoc.querySelector("parsererror")
+      if (innerParserError) {
+        console.log("Direct parsing failed, trying to unescape HTML entities...")
+        const unescapedContent = dataContent
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&amp;/g, "&")
+          .replace(/&quot;/g, '"')
+          .replace(/&#39;/g, "'")
+
+        innerXmlDoc = parser.parseFromString(unescapedContent, "text/xml")
+        console.log("Unescaped content length:", unescapedContent.length)
+      }
+    } catch (e) {
+      console.error("Error parsing inner XML:", e)
+      return []
+    }
+
+    // Look for Table elements in various possible containers
     const tables = Array.from(innerXmlDoc.getElementsByTagName("Table"))
+    console.log("Found", tables.length, "Table elements")
 
     if (tables.length === 0) {
-      const alternativeContainers = ["NewDataSet", "DataSet", "diffgr:diffgram", "diffgram"]
+      // Try alternative container names
+      const alternativeContainers = ["NewDataSet", "DataSet", "diffgr:diffgram", "diffgram", "DocumentElement"]
       for (const containerName of alternativeContainers) {
         const container = innerXmlDoc.querySelector(containerName)
         if (container) {
+          console.log("Found container:", containerName)
           const tablesInContainer = Array.from(container.getElementsByTagName("Table"))
           if (tablesInContainer.length > 0) {
             tables.push(...tablesInContainer)
+            console.log("Found", tablesInContainer.length, "tables in", containerName)
             break
           }
         }
       }
     }
 
-    return tables.map((table) => {
+    if (tables.length === 0) {
+      console.error("No Table elements found in XML")
+      console.log(
+        "Inner XML structure:",
+        innerXmlDoc.documentElement ? innerXmlDoc.documentElement.outerHTML.substring(0, 500) : "No document element",
+      )
+      return []
+    }
+
+    console.log("Processing", tables.length, "table records...")
+
+    const items = tables.map((table, index) => {
       const get = (tag) => {
         const element = table.getElementsByTagName(tag)[0]
-        return element ? element.textContent.trim() : ""
+        const value = element ? element.textContent.trim() : ""
+        return value
       }
 
-      return {
+      const item = {
         ITEMNO: get("ITEMNO"),
         IDESC: get("IDESC"),
         ITUPC: get("ITUPC"),
         PRC1: get("PRC1"),
         QTYOH: get("QTYOH"),
       }
+
+      // Log first few items for debugging
+      if (index < 3) {
+        console.log(`Item ${index + 1}:`, item)
+      }
+
+      return item
     })
+
+    console.log("Successfully extracted", items.length, "items")
+    return items
   } catch (e) {
     console.error("Error processing XML:", e)
+    console.error("Error stack:", e.stack)
     return []
   }
 }
