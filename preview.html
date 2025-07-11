@@ -455,38 +455,97 @@
     </div>
   </div>
 
-  <!-- Order Tracking Modal -->
-  <div id="tracking-modal" class="fixed inset-0 bg-black bg-opacity-50 modal hidden z-50 flex items-center justify-center p-4">
-    <div class="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-      <div class="p-6">
-        <div class="flex justify-between items-center mb-4">
-          <h2 class="text-2xl font-bold text-gray-900">Order Tracking</h2>
-          <button id="close-tracking" class="text-gray-400 hover:text-gray-600 text-2xl">
-            <i class="fas fa-times"></i>
-          </button>
+  <!-- Enhanced Order Tracking Modal -->
+<div id="tracking-modal" class="fixed inset-0 bg-black bg-opacity-50 modal hidden z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+    <div class="p-6">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-2xl font-bold text-gray-900">Order & Invoice Tracking</h2>
+        <button id="close-tracking" class="text-gray-400 hover:text-gray-600 text-2xl">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      
+      <!-- Tracking Search Form -->
+      <div class="bg-gray-50 rounded-lg p-4 mb-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Search Type</label>
+            <select id="tracking-type" class="w-full rounded border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500">
+              <option value="po">By PO Number</option>
+              <option value="order">By Order Number</option>
+              <option value="date">By Date Range</option>
+            </select>
+          </div>
+          <div id="single-input-container">
+            <label class="block text-sm font-medium text-gray-700 mb-1">PO Number</label>
+            <input type="text" id="tracking-input" class="w-full rounded border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500" placeholder="Enter PO number">
+          </div>
+          <div id="date-range-container" class="hidden col-span-2">
+            <div class="grid grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                <input type="date" id="start-date" class="w-full rounded border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500">
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                <input type="date" id="end-date" class="w-full rounded border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500">
+              </div>
+            </div>
+          </div>
         </div>
         
-        <form id="tracking-form" class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">PO Number</label>
-            <input type="text" id="tracking-po" required class="w-full rounded border-gray-300 py-2 px-3 text-sm focus:ring-primary-500 focus:border-primary-500" placeholder="Enter your PO number">
-          </div>
-        
-          <button type="submit" id="track-order-btn" class="w-full bg-primary-600 hover:bg-primary-700 text-white py-2 px-4 rounded-lg transition-colors">
-            <i class="fas fa-search mr-2"></i>
-            Track Order
+        <div class="flex gap-3 mt-4">
+          <button id="search-invoices-btn" class="bg-primary-600 hover:bg-primary-700 text-white py-2 px-4 rounded transition-colors">
+            <i class="fas fa-search mr-2"></i>Search Invoices
           </button>
-        </form>
-        
-        <div id="tracking-results" class="mt-6 hidden">
-          <h3 class="text-lg font-semibold mb-3">Tracking Information</h3>
-          <div id="tracking-content" class="space-y-3">
-            <!-- Tracking results will be inserted here -->
+          <button id="get-tracking-btn" class="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded transition-colors">
+            <i class="fas fa-truck mr-2"></i>Get Tracking
+          </button>
+          <button id="get-package-contents-btn" class="bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded transition-colors">
+            <i class="fas fa-box mr-2"></i>Package Contents
+          </button>
+        </div>
+      </div>
+      
+      <!-- Results Container -->
+      <div id="tracking-results" class="hidden">
+        <!-- Invoice Results -->
+        <div id="invoice-results" class="mb-6 hidden">
+          <h3 class="text-lg font-semibold mb-3 flex items-center">
+            <i class="fas fa-file-invoice mr-2 text-primary-600"></i>
+            Invoice Information
+          </h3>
+          <div id="invoice-content" class="space-y-4">
+            <!-- Invoice data will be inserted here -->
+          </div>
+        </div>
+
+        <!-- Tracking Results -->
+        <div id="tracking-info-results" class="mb-6 hidden">
+          <h3 class="text-lg font-semibold mb-3 flex items-center">
+            <i class="fas fa-shipping-fast mr-2 text-blue-600"></i>
+            Tracking Information
+          </h3>
+          <div id="tracking-info-content" class="space-y-4">
+            <!-- Tracking data will be inserted here -->
+          </div>
+        </div>
+
+        <!-- Package Contents Results -->
+        <div id="package-results" class="mb-6 hidden">
+          <h3 class="text-lg font-semibold mb-3 flex items-center">
+            <i class="fas fa-boxes mr-2 text-green-600"></i>
+            Package Contents
+          </h3>
+          <div id="package-content" class="space-y-4">
+            <!-- Package data will be inserted here -->
           </div>
         </div>
       </div>
     </div>
   </div>
+</div>
 
   <!-- Order Confirmation Modal -->
   <div id="confirmation-modal" class="fixed inset-0 bg-black bg-opacity-50 modal hidden z-50 flex items-center justify-center p-4">
@@ -1438,7 +1497,7 @@
     loadAllBtn.addEventListener('click', loadAllItems);
     
     // Load more items button
-    loadMoreBtn.addEventListener('click', loadMoreItems);
+    loadMoreItems.addEventListener('click', loadMoreItems);
     
     // Refresh
     refreshBtn.addEventListener('click', () => {
@@ -1766,6 +1825,311 @@
     updateCartCount();
     renderCart();
     loadInitialItems();
-  </script>
+
+// Add this to the existing JavaScript section, after the existing tracking form event listener
+
+// Enhanced tracking functionality
+const INVOICE_ENDPOINT = "https://fprbackend.netlify.app/.netlify/functions/invoiceTracking";
+
+// Tracking type change handler
+document.getElementById('tracking-type').addEventListener('change', (e) => {
+  const type = e.target.value;
+  const singleContainer = document.getElementById('single-input-container');
+  const dateContainer = document.getElementById('date-range-container');
+  const input = document.getElementById('tracking-input');
+  const label = singleContainer.querySelector('label');
+
+  if (type === 'date') {
+    singleContainer.classList.add('hidden');
+    dateContainer.classList.remove('hidden');
+  } else {
+    singleContainer.classList.remove('hidden');
+    dateContainer.classList.add('hidden');
+    
+    if (type === 'po') {
+      label.textContent = 'PO Number';
+      input.placeholder = 'Enter PO number';
+    } else if (type === 'order') {
+      label.textContent = 'Order Number';
+      input.placeholder = 'Enter order number';
+    }
+  }
+});
+
+// Search invoices
+document.getElementById('search-invoices-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('search-invoices-btn');
+  const originalText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Searching...';
+
+  try {
+    const type = document.getElementById('tracking-type').value;
+    let requestData = {
+      credentials: {
+        customerNumber: '99994',
+        userName: '99994',
+        password: '12345',
+        source: 'FPR'
+      }
+    };
+
+    if (type === 'po') {
+      requestData.action = 'get-by-po';
+      requestData.poNumber = document.getElementById('tracking-input').value;
+    } else if (type === 'order') {
+      requestData.action = 'get-by-order';
+      requestData.orderNumber = document.getElementById('tracking-input').value;
+    } else if (type === 'date') {
+      requestData.action = 'get-by-date';
+      requestData.startDate = document.getElementById('start-date').value;
+      requestData.endDate = document.getElementById('end-date').value;
+    }
+
+    const response = await fetch(INVOICE_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestData)
+    });
+
+    const result = await response.json();
+
+    if (result.success && result.data.invoices) {
+      displayInvoiceResults(result.data.invoices);
+    } else {
+      displayError('No invoices found or error occurred');
+    }
+
+  } catch (error) {
+    console.error('Invoice search error:', error);
+    displayError(`Search failed: ${error.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  }
+});
+
+// Get tracking information
+document.getElementById('get-tracking-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('get-tracking-btn');
+  const originalText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Getting Tracking...';
+
+  try {
+    const poNumber = document.getElementById('tracking-input').value;
+    
+    if (!poNumber) {
+      alert('Please enter a PO number');
+      return;
+    }
+
+    const response = await fetch(INVOICE_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'get-tracking',
+        poNumber: poNumber,
+        credentials: {
+          customerNumber: '99994',
+          userName: '99994',
+          password: '12345',
+          source: 'FPR'
+        }
+      })
+    });
+
+    const result = await response.json();
+
+    if (result.success && result.data.tracking) {
+      displayTrackingResults(result.data.tracking);
+    } else {
+      displayError('No tracking information found');
+    }
+
+  } catch (error) {
+    console.error('Tracking error:', error);
+    displayError(`Tracking failed: ${error.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  }
+});
+
+// Get package contents
+document.getElementById('get-package-contents-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('get-package-contents-btn');
+  const originalText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Getting Contents...';
+
+  try {
+    const poNumber = document.getElementById('tracking-input').value;
+    
+    if (!poNumber) {
+      alert('Please enter a PO number');
+      return;
+    }
+
+    const response = await fetch(INVOICE_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'get-package-contents',
+        poNumber: poNumber,
+        credentials: {
+          customerNumber: '99994',
+          userName: '99994',
+          password: '12345',
+          source: 'FPR'
+        }
+      })
+    });
+
+    const result = await response.json();
+
+    if (result.success && result.data.packages) {
+      displayPackageResults(result.data.packages);
+    } else {
+      displayError('No package contents found');
+    }
+
+  } catch (error) {
+    console.error('Package contents error:', error);
+    displayError(`Package contents failed: ${error.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  }
+});
+
+// Display functions
+function displayInvoiceResults(invoices) {
+  const container = document.getElementById('invoice-content');
+  const resultsDiv = document.getElementById('invoice-results');
+  
+  if (invoices.length === 0) {
+    container.innerHTML = '<p class="text-gray-500">No invoices found</p>';
+  } else {
+    container.innerHTML = invoices.map(invoice => `
+      <div class="bg-white border rounded-lg p-4 shadow-sm">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <h4 class="font-semibold text-gray-800">Invoice #${invoice.invoiceNumber}</h4>
+            <p class="text-sm text-gray-600">PO: ${invoice.poNumber}</p>
+            <p class="text-sm text-gray-600">Date: ${invoice.formattedInvoiceDate || invoice.invoiceDate}</p>
+          </div>
+          <div>
+            <p class="text-sm text-gray-600">Gross Sales: <span class="font-semibold">$${invoice.grossSales.toFixed(2)}</span></p>
+            <p class="text-sm text-gray-600">Tax: <span class="font-semibold">$${invoice.tax.toFixed(2)}</span></p>
+            <p class="text-sm text-gray-600">Total: <span class="font-semibold text-primary-600">$${invoice.total.toFixed(2)}</span></p>
+          </div>
+          <div>
+            <p class="text-sm text-gray-600">Shipping: ${invoice.shippingType}</p>
+            <p class="text-sm text-gray-600">Due: ${invoice.formattedDueDate || invoice.dueDate}</p>
+            ${invoice.pastDue ? '<span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">Past Due</span>' : '<span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Current</span>'}
+          </div>
+        </div>
+      </div>
+    `).join('');
+  }
+  
+  resultsDiv.classList.remove('hidden');
+  document.getElementById('tracking-results').classList.remove('hidden');
+}
+
+function displayTrackingResults(tracking) {
+  const container = document.getElementById('tracking-info-content');
+  const resultsDiv = document.getElementById('tracking-info-results');
+  
+  if (tracking.length === 0) {
+    container.innerHTML = '<p class="text-gray-500">No tracking information found</p>';
+  } else {
+    container.innerHTML = tracking.map(track => `
+      <div class="bg-white border rounded-lg p-4 shadow-sm">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <h4 class="font-semibold text-gray-800">Tracking: ${track.trackingNumber}</h4>
+            <p class="text-sm text-gray-600">PO: ${track.poNumber}</p>
+            <p class="text-sm text-gray-600">Carrier: ${track.carrier}</p>
+            <p class="text-sm text-gray-600">Service: ${track.service}</p>
+          </div>
+          <div>
+            <p class="text-sm text-gray-600">Ship Date: ${track.shipDate}</p>
+            <p class="text-sm text-gray-600">Packages: ${track.packageCount}</p>
+            <p class="text-sm text-gray-600">Weight: ${track.weight}</p>
+            <p class="text-sm text-gray-600">Status: <span class="font-semibold">${track.status}</span></p>
+          </div>
+        </div>
+        ${track.trackingNumber ? `
+          <div class="mt-3 pt-3 border-t">
+            <a href="https://www.ups.com/track?tracknum=${track.trackingNumber}" target="_blank" 
+               class="inline-flex items-center px-3 py-1 bg-brown-600 text-white text-sm rounded hover:bg-brown-700 transition-colors">
+              <i class="fas fa-external-link-alt mr-1"></i>
+              Track on UPS
+            </a>
+          </div>
+        ` : ''}
+      </div>
+    `).join('');
+  }
+  
+  resultsDiv.classList.remove('hidden');
+  document.getElementById('tracking-results').classList.remove('hidden');
+}
+
+function displayPackageResults(packages) {
+  const container = document.getElementById('package-content');
+  const resultsDiv = document.getElementById('package-results');
+  
+  if (packages.length === 0) {
+    container.innerHTML = '<p class="text-gray-500">No package contents found</p>';
+  } else {
+    // Group packages by tracking number
+    const groupedPackages = packages.reduce((acc, pkg) => {
+      if (!acc[pkg.trackingNumber]) {
+        acc[pkg.trackingNumber] = [];
+      }
+      acc[pkg.trackingNumber].push(pkg);
+      return acc;
+    }, {});
+
+    container.innerHTML = Object.entries(groupedPackages).map(([trackingNumber, items]) => `
+      <div class="bg-white border rounded-lg p-4 shadow-sm">
+        <h4 class="font-semibold text-gray-800 mb-3">Package: ${trackingNumber}</h4>
+        <div class="space-y-2">
+          ${items.map(item => `
+            <div class="flex justify-between items-center py-2 border-b border-gray-100 last:border-b-0">
+              <div class="flex-1">
+                <p class="font-medium">${item.description}</p>
+                <p class="text-sm text-gray-600">Item #: ${item.itemNumber}</p>
+              </div>
+              <div class="text-right">
+                <p class="font-semibold">Qty: ${item.quantity}</p>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `).join('');
+  }
+  
+  resultsDiv.classList.remove('hidden');
+  document.getElementById('tracking-results').classList.remove('hidden');
+}
+
+function displayError(message) {
+  const container = document.getElementById('tracking-results');
+  container.innerHTML = `
+    <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+      <div class="flex items-center">
+        <i class="fas fa-exclamation-circle text-red-500 mr-3"></i>
+        <p class="text-red-700">${message}</p>
+      </div>
+    </div>
+  `;
+  container.classList.remove('hidden');
+}
+</script>
 </body>
 </html>
