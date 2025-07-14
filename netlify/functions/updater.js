@@ -21,7 +21,7 @@ exports.handler = async (event, context) => {
     // Parse request body to get pagination parameters
     const {
       lastUpdate = "1/1/1990", // Default to get all items from 1990
-      lastItem = 1, // Start from item 1, not -1
+      lastItem = -1, // Start from item 1, not -1
       pageSize = 10, // Default page size of 10 items
     } = JSON.parse(event.body || "{}")
 
