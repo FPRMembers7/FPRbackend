@@ -30,7 +30,7 @@ exports.handler = async (event, context) => {
           <Password>12345</Password>
           <LastUpdate>${lastUpdate}</LastUpdate>
           <LastItem>${lastItem}</LastItem>
-          <Source>FPR</Source>
+          <Source>*</Source>
         </DailyItemUpdate>
       </soap:Body>
     </soap:Envelope>`
