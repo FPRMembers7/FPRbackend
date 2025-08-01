@@ -202,6 +202,8 @@ function extractItemsFromMatches(matches) {
       ITUPC: getField("ITUPC"),
       PRC1: getField("PRC1"),
       QTYOH: getField("QTYOH"),
+            ITYPE: getField("ITYPE"),
+
     }
 
     // Only add items with at least an item number
