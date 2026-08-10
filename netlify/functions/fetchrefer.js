@@ -2,8 +2,16 @@
 
 const Airtable = require('airtable');
 const { resolveAllowedOrigin } = require('./lib/allowedOrigin');
+const { readBearerToken, verifyMemberToken } = require('./lib/msAuth');
 
-const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID);
+function getBase() {
+  if (global.__FPR_AIRTABLE_BASE__) return global.__FPR_AIRTABLE_BASE__;
+  return new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(process.env.AIRTABLE_BASE_ID);
+}
+
+function escapeFormulaValue(value) {
+  return String(value).replace(/"/g, '\\"');
+}
 
 exports.handler = async function (event, context) {
   const allowedOrigin = resolveAllowedOrigin(event);
@@ -11,57 +19,51 @@ exports.handler = async function (event, context) {
   if (!allowedOrigin) {
     return {
       statusCode: 403,
-      headers: {
-        'Access-Control-Allow-Headers': 'Content-Type',
-      },
+      headers: { 'Access-Control-Allow-Headers': 'Content-Type, Authorization' },
       body: JSON.stringify({ error: 'Forbidden' }),
     };
   }
 
-  const referrerId = event.queryStringParameters?.id;
+  const corsHeaders = {
+    'Access-Control-Allow-Origin': allowedOrigin,
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  };
 
-  if (!referrerId) {
+  const token = readBearerToken(event.headers);
+  const verified = await verifyMemberToken(token, process.env.MEMBERSTACK_SECRET_KEY);
+
+  if (!verified.ok) {
     return {
-      statusCode: 400,
-      headers: {
-        'Access-Control-Allow-Origin': allowedOrigin,
-        'Access-Control-Allow-Headers': 'Content-Type',
-      },
-      body: JSON.stringify({ error: 'Missing ReferrerID in query parameters' }),
+      statusCode: 401,
+      headers: corsHeaders,
+      body: JSON.stringify({ error: 'Unauthorized' }),
     };
   }
 
-  try {
-    const filteredRecords = [];
+  // Identity comes ONLY from the verified token. A caller-supplied ?id= is
+  // never consulted — a member can only ever see their own referral count.
+  const referrerId = verified.memberId;
 
-    await base('Referrals').select({
+  try {
+    let count = 0;
+
+    await getBase()('Referrals').select({
       view: 'Grid view',
-      filterByFormula: `{ReferrerID} = "${referrerId}"`
+      filterByFormula: `{ReferrerID} = "${escapeFormulaValue(referrerId)}"`,
     }).eachPage((recordsPage, fetchNextPage) => {
-      recordsPage.forEach(record => {
-        filteredRecords.push(record.fields);
-      });
+      count += recordsPage.length;
       fetchNextPage();
     });
 
     return {
       statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': allowedOrigin,
-        'Access-Control-Allow-Headers': 'Content-Type',
-      },
-      body: JSON.stringify({
-        count: filteredRecords.length,
-        records: filteredRecords
-      }),
+      headers: corsHeaders,
+      body: JSON.stringify({ count }),
     };
   } catch (error) {
     return {
       statusCode: 500,
-      headers: {
-        'Access-Control-Allow-Origin': allowedOrigin,
-        'Access-Control-Allow-Headers': 'Content-Type',
-      },
+      headers: corsHeaders,
       body: JSON.stringify({ error: 'Airtable fetch error', details: error.message }),
     };
   }
